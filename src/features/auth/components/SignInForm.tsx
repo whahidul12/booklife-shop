@@ -1,0 +1,97 @@
+"use client";
+
+import { useActionState } from "react";
+import { useRouter } from "next/navigation";
+import { useEffect } from "react";
+import Link from "next/link";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { signInAction } from "@/features/auth/actions/auth.actions";
+
+const initialState: { error?: string; data?: { userId: string } } = {};
+
+export function SignInForm() {
+  const router = useRouter();
+  const [state, formAction, isPending] = useActionState(
+    signInAction,
+    initialState,
+  );
+
+  // Redirect to home on successful sign-in
+  useEffect(() => {
+    if (state.data) {
+      router.push("/");
+      router.refresh();
+    }
+  }, [state.data, router]);
+
+  return (
+    <form action={formAction} className="space-y-5">
+      {/* Global error banner */}
+      {state.error && (
+        <div
+          role="alert"
+          className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
+        >
+          {state.error}
+        </div>
+      )}
+
+      <div className="space-y-1.5">
+        <label
+          htmlFor="email"
+          className="block text-sm font-medium text-gray-700"
+        >
+          ইমেইল
+        </label>
+        <Input
+          id="email"
+          name="email"
+          type="email"
+          autoComplete="email"
+          placeholder="example@email.com"
+          required
+          className="h-10"
+          disabled={isPending}
+        />
+      </div>
+
+      <div className="space-y-1.5">
+        <label
+          htmlFor="password"
+          className="block text-sm font-medium text-gray-700"
+        >
+          পাসওয়ার্ড
+        </label>
+        <Input
+          id="password"
+          name="password"
+          type="password"
+          autoComplete="current-password"
+          placeholder="••••••••"
+          required
+          className="h-10"
+          disabled={isPending}
+        />
+      </div>
+
+      <Button
+        type="submit"
+        disabled={isPending}
+        className="h-10 w-full bg-red-600 text-white hover:bg-red-700"
+      >
+        {isPending ? "লগইন হচ্ছে..." : "লগইন করুন"}
+      </Button>
+
+      <p className="text-center text-sm text-gray-600">
+        একাউন্ট নেই?{" "}
+        <Link
+          href="/sign-up"
+          className="font-semibold text-red-600 hover:underline"
+        >
+          নিবন্ধন করুন
+        </Link>
+      </p>
+    </form>
+  );
+}
