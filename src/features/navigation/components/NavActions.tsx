@@ -8,7 +8,7 @@
  * - All logged-in: wishlist, cart, sign-out
  * - Guest: sign-in link
  */
-import { Heart, ShoppingBag, User, LogOut, LogIn, LayoutDashboard } from "lucide-react";
+import { Heart, ShoppingBag, User, LogOut, LogIn, LayoutDashboard, Loader2 } from "lucide-react";
 import Link from "next/link";
 import { useAppStore } from "../store/AppStoreContext";
 import { useSession } from "@/lib/auth-client";
@@ -21,9 +21,14 @@ interface NavActionsProps {
 export function NavActions({ labels = true }: NavActionsProps) {
   const { cartCount, wishlistCount } = useAppStore();
   const { data: session, isPending } = useSession();
-  const isLoggedIn = !isPending && !!session?.user;
+  const isLoggedIn = !!session?.user;
   const role = (session?.user as { role?: string } | undefined)?.role ?? "customer";
-  const isStaff = role === "admin" || role === "moderator";
+  const isStaff =
+    role === "admin" ||
+    role === "moderator" ||
+    role.includes("admin") ||
+    role.includes("moderator") ||
+    role.endsWith("_mod");
 
   return (
     <div className={`flex shrink-0 items-center ${labels ? "gap-4" : "gap-0"}`}>
@@ -57,7 +62,11 @@ export function NavActions({ labels = true }: NavActionsProps) {
         {labels && <span className="hidden text-sm lg:inline">শপিং ব্যাগ</span>}
       </Link>
 
-      {isLoggedIn ? (
+      {isPending ? (
+        <div className="flex min-h-10 min-w-10 items-center justify-center">
+          <Loader2 className="size-5 animate-spin text-muted-foreground" aria-hidden="true" />
+        </div>
+      ) : isLoggedIn ? (
         <>
           {/* Admin/Moderator → Dashboard button (prominent) */}
           {isStaff ? (
@@ -77,9 +86,9 @@ export function NavActions({ labels = true }: NavActionsProps) {
               className="text-foreground hover:text-brand focus-visible:ring-ring flex min-h-10 min-w-10 items-center justify-center gap-1 rounded-md transition-colors focus-visible:ring-2 focus-visible:outline-none"
             >
               <User className="size-5" aria-hidden="true" />
-              {labels &&
+              {labels && (
                 <span className="hidden text-sm lg:inline">অ্যাকাউন্ট</span>
-              }
+              )}
             </Link>
           )}
 

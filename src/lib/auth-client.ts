@@ -28,7 +28,10 @@ import {
 } from "@/lib/permissions";
 
 export const authClient = createAuthClient({
-  baseURL: process.env.NEXT_PUBLIC_APP_URL,
+  baseURL:
+    typeof window !== "undefined"
+      ? window.location.origin
+      : process.env.NEXT_PUBLIC_APP_URL,
   plugins: [
     adminClient({
       ac,
