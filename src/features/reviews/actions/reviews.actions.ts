@@ -153,3 +153,44 @@ export async function getAllReviewsAction(): Promise<
     return { error: "রিভিউ লোড করা যায়নি" };
   }
 }
+
+// ── Moderator — update review ─────────────────────────────────────────────
+
+export async function updateReviewAction(
+  id: string,
+  _: unknown,
+  formData: FormData,
+): Promise<ActionResult<void>> {
+  try {
+    await requirePermission({ reviews: ["moderate"] });
+    const rating = formData.get("rating") ? Number(formData.get("rating")) : undefined;
+    const comment = formData.get("comment") !== null ? String(formData.get("comment")) : undefined;
+    const isHidden = formData.get("isHidden") === "true";
+
+    const updates: Partial<typeof reviews.$inferInsert> = {
+      updatedAt: new Date(),
+    };
+    if (rating !== undefined && rating >= 1 && rating <= 5) updates.rating = rating;
+    if (comment !== undefined) updates.comment = comment || null;
+    updates.isHidden = isHidden;
+
+    await db.update(reviews).set(updates).where(eq(reviews.id, id));
+    return { data: undefined };
+  } catch (err) {
+    if (err instanceof ActionError) return { error: err.message };
+    return { error: "রিভিউ আপডেট করা যায়নি" };
+  }
+}
+
+// ── Moderator — delete review ─────────────────────────────────────────────
+
+export async function deleteReviewAction(id: string): Promise<ActionResult<void>> {
+  try {
+    await requirePermission({ reviews: ["moderate"] });
+    await db.delete(reviews).where(eq(reviews.id, id));
+    return { data: undefined };
+  } catch (err) {
+    if (err instanceof ActionError) return { error: err.message };
+    return { error: "রিভিউ মুছে ফেলা যায়নি" };
+  }
+}

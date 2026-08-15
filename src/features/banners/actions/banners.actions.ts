@@ -152,6 +152,23 @@ export async function updateBannerAction(
   }
 }
 
+export async function toggleBannerActiveAction(
+  id: string,
+  isActive: boolean,
+): Promise<ActionResult<void>> {
+  try {
+    const session = await requirePermission({ marketing: ["manage"] });
+    await db
+      .update(banners)
+      .set({ isActive, updatedAt: new Date(), updatedBy: session.user.id })
+      .where(eq(banners.id, id));
+    return { data: undefined };
+  } catch (err) {
+    if (err instanceof ActionError) return { error: err.message };
+    return { error: "ব্যানার স্ট্যাটাস পরিবর্তন করা যায়নি" };
+  }
+}
+
 export async function deleteBannerAction(id: string): Promise<ActionResult<void>> {
   try {
     await requirePermission({ marketing: ["manage"] });
@@ -162,3 +179,5 @@ export async function deleteBannerAction(id: string): Promise<ActionResult<void>
     return { error: "ব্যানার মুছে ফেলা যায়নি" };
   }
 }
+
+

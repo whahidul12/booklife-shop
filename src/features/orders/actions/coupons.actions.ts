@@ -130,6 +130,52 @@ export async function deleteCouponAction(id: string): Promise<ActionResult<void>
   }
 }
 
+// ── Staff — update coupon ──────────────────────────────────────────────────
+
+export async function updateCouponAction(
+  id: string,
+  _: unknown,
+  formData: FormData,
+): Promise<ActionResult<void>> {
+  try {
+    await requirePermission({ coupons: ["manage"] });
+
+    const parsed = couponSchema.partial().safeParse({
+      code: formData.get("code") || undefined,
+      discountTaka: formData.get("discountTaka") || undefined,
+      maxUses: formData.get("maxUses") || undefined,
+      expiresAt: formData.get("expiresAt") || undefined,
+      isActive: formData.get("isActive") !== "false",
+    });
+
+    if (!parsed.success) {
+      return {
+        error: Object.values(parsed.error.flatten().fieldErrors).flat().join(", "),
+      };
+    }
+
+    const updates: Partial<typeof coupons.$inferInsert> = {
+      updatedAt: new Date(),
+    };
+
+    if (parsed.data.code) updates.code = parsed.data.code;
+    if (parsed.data.discountTaka !== undefined)
+      updates.discountPaisa = Math.round(parsed.data.discountTaka * 100);
+    if (formData.has("maxUses"))
+      updates.maxUses = parsed.data.maxUses ?? null;
+    if (formData.has("expiresAt"))
+      updates.expiresAt = parsed.data.expiresAt ?? null;
+    if (parsed.data.isActive !== undefined)
+      updates.isActive = parsed.data.isActive;
+
+    await db.update(coupons).set(updates).where(eq(coupons.id, id));
+    return { data: undefined };
+  } catch (err) {
+    if (err instanceof ActionError) return { error: err.message };
+    return { error: "কুপন আপডেট করা যায়নি" };
+  }
+}
+
 // ── Staff — toggle active ──────────────────────────────────────────────────
 
 export async function toggleCouponActiveAction(

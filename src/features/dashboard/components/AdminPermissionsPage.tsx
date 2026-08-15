@@ -1,23 +1,6 @@
 "use client";
 
-/**
- * AdminPermissionsPage
- *
- * Admin-only page. Shows every user with role="moderator" and renders
- * a grid of permission checkboxes for each one. Toggling a checkbox
- * immediately calls setModeratorPermissionsAction — no separate save button
- * needed per-cell (optimistic UI with error rollback).
- *
- * Layout:
- *   ┌──────────────┬──────────┬──────────┬ … ┐
- *   │ Moderator    │ Books    │ Reviews  │   │
- *   ├──────────────┼──────────┼──────────┼ … ┤
- *   │ User A       │  ✓       │          │   │
- *   │ User B       │          │  ✓       │   │
- *   └──────────────┴──────────┴──────────┴───┘
- */
-import { useEffect, useState, useCallback } from "react";
-import { RefreshCw, ShieldCheck, AlertCircle, CheckCircle } from "lucide-react";
+import React, { useEffect, useState, useMemo, useCallback } from "react";
 import {
   getAllModeratorsWithPermissionsAction,
   setModeratorPermissionsAction,
@@ -25,39 +8,113 @@ import {
   type PermissionUpdate,
 } from "@/features/permissions/actions/permissions.actions";
 import { PERMISSION_FIELDS } from "@/db/schema/moderator-permissions.schema";
-import type { ModeratorPermission } from "@/db/schema";
-
-type PermKey = keyof Omit<ModeratorPermission, "userId" | "updatedAt" | "updatedBy">;
+import {
+  PermissionsHeader,
+  PermissionsInsightCards,
+  PermissionsFilterBar,
+  PermissionsMatrixTable,
+  ModeratorViewModal,
+  PermissionsToast,
+  type PermissionFilterState,
+  type PermissionAccessFilter,
+  type PermissionInsights,
+  type PermKey,
+  type ToastMessage,
+} from "./permissions";
 
 export function AdminPermissionsPage() {
   const [moderators, setModerators] = useState<ModeratorWithPermissions[]>([]);
-  const [loading, setLoading]       = useState(true);
-  const [savingKey, setSavingKey]   = useState<string | null>(null); // "userId:field"
-  const [toast, setToast]           = useState<{ msg: string; ok: boolean } | null>(null);
-  const [loadError, setLoadError]   = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [savingKey, setSavingKey] = useState<string | null>(null);
 
-  // ── Load ────────────────────────────────────────────────────────────────
-  const load = useCallback(async () => {
+  // Modals state
+  const [viewingModerator, setViewingModerator] = useState<ModeratorWithPermissions | null>(null);
+
+  // Toast state
+  const [toast, setToast] = useState<ToastMessage | null>(null);
+
+  // Filters state
+  const [filters, setFilters] = useState<PermissionFilterState>({
+    search: "",
+    accessLevel: "all",
+  });
+
+  // Show Toast helper
+  const showToast = useCallback(
+    (type: "success" | "error" | "info", message: string) => {
+      setToast({
+        id: Math.random().toString(36).slice(2),
+        type,
+        message,
+      });
+    },
+    []
+  );
+
+  // Load data
+  const loadData = useCallback(async () => {
     setLoading(true);
-    setLoadError(null);
-    const res = await getAllModeratorsWithPermissionsAction();
-    if (res.error) setLoadError(res.error);
-    else setModerators(res.data ?? []);
-    setLoading(false);
-  }, []);
+    try {
+      const res = await getAllModeratorsWithPermissionsAction();
+      if (res.data) setModerators(res.data);
+      else if (res.error) showToast("error", res.error);
+    } catch {
+      showToast("error", "Failed to load moderator permissions");
+    } finally {
+      setLoading(false);
+    }
+  }, [showToast]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
 
-  // ── Show toast for 2.5 s ────────────────────────────────────────────────
-  const showToast = (msg: string, ok: boolean) => {
-    setToast({ msg, ok });
-    setTimeout(() => setToast(null), 2500);
-  };
+  // Calculate Insight Metrics
+  const insights: PermissionInsights = useMemo(() => {
+    let fullAccess = 0;
+    let partialAccess = 0;
+    let noAccess = 0;
 
-  // ── Toggle a single permission ──────────────────────────────────────────
+    for (const m of moderators) {
+      const activeCount = Object.values(m.permissions).filter(Boolean).length;
+      if (activeCount === PERMISSION_FIELDS.length) fullAccess++;
+      else if (activeCount === 0) noAccess++;
+      else partialAccess++;
+    }
+
+    return {
+      totalModerators: moderators.length,
+      fullAccess,
+      partialAccess,
+      noAccess,
+    };
+  }, [moderators]);
+
+  // Filtered moderators
+  const filteredModerators = useMemo(() => {
+    return moderators.filter((mod) => {
+      // 1. Search by name or email
+      if (filters.search.trim() !== "") {
+        const query = filters.search.trim().toLowerCase();
+        const matchesName = mod.name.toLowerCase().includes(query);
+        const matchesEmail = mod.email.toLowerCase().includes(query);
+        if (!matchesName && !matchesEmail) return false;
+      }
+
+      // 2. Access level filter
+      const activeCount = Object.values(mod.permissions).filter(Boolean).length;
+      if (filters.accessLevel === "full" && activeCount !== PERMISSION_FIELDS.length) return false;
+      if (filters.accessLevel === "partial" && (activeCount === 0 || activeCount === PERMISSION_FIELDS.length)) return false;
+      if (filters.accessLevel === "none" && activeCount !== 0) return false;
+
+      return true;
+    });
+  }, [moderators, filters]);
+
+  // Toggle single permission
   async function handleToggle(
     moderator: ModeratorWithPermissions,
-    field: PermKey,
+    field: PermKey
   ) {
     const cellKey = `${moderator.id}:${field}`;
     const newValue = !moderator.permissions[field];
@@ -67,250 +124,145 @@ export function AdminPermissionsPage() {
       prev.map((m) =>
         m.id === moderator.id
           ? { ...m, permissions: { ...m.permissions, [field]: newValue } }
-          : m,
-      ),
+          : m
+      )
     );
 
     setSavingKey(cellKey);
     const res = await setModeratorPermissionsAction(
       moderator.id,
-      { [field]: newValue } as PermissionUpdate,
+      { [field]: newValue } as PermissionUpdate
     );
     setSavingKey(null);
 
     if (res.error) {
-      // Roll back on error
+      // Rollback on error
       setModerators((prev) =>
         prev.map((m) =>
           m.id === moderator.id
             ? { ...m, permissions: { ...m.permissions, [field]: !newValue } }
-            : m,
-        ),
+            : m
+        )
       );
-      showToast(res.error, false);
+      showToast("error", res.error);
     } else {
+      const fieldLabel = PERMISSION_FIELDS.find((f) => f.key === field)?.label || field;
       showToast(
-        `${moderator.name} — ${PERMISSION_FIELDS.find((f) => f.key === field)?.label} ${newValue ? "enabled" : "disabled"}`,
-        true,
+        "success",
+        `${moderator.name} — ${fieldLabel} ${newValue ? "granted" : "revoked"}.`
       );
     }
   }
 
-  // ── Grant / revoke ALL permissions for one moderator ───────────────────
-  async function handleGrantAll(moderator: ModeratorWithPermissions, grant: boolean) {
-    const all = Object.fromEntries(
-      PERMISSION_FIELDS.map(({ key }) => [key, grant]),
-    ) as PermissionUpdate;
+  // Grant ALL permissions for a moderator
+  async function handleGrantAll(moderator: ModeratorWithPermissions) {
+    const allTrue: PermissionUpdate = {};
+    for (const f of PERMISSION_FIELDS) {
+      allTrue[f.key] = true;
+    }
 
     setModerators((prev) =>
       prev.map((m) =>
         m.id === moderator.id
-          ? { ...m, permissions: { ...m.permissions, ...all } }
-          : m,
-      ),
+          ? { ...m, permissions: { ...m.permissions, ...allTrue } }
+          : m
+      )
     );
 
-    setSavingKey(moderator.id);
-    const res = await setModeratorPermissionsAction(moderator.id, all);
-    setSavingKey(null);
-
+    const res = await setModeratorPermissionsAction(moderator.id, allTrue);
     if (res.error) {
-      showToast(res.error, false);
-      load();
+      showToast("error", res.error);
+      loadData();
     } else {
-      showToast(
-        `${moderator.name} — সব পারমিশন ${grant ? "দেওয়া হয়েছে" : "সরানো হয়েছে"}`,
-        true,
-      );
+      showToast("success", `Granted full access permissions to ${moderator.name}.`);
     }
   }
 
-  // ── Render ───────────────────────────────────────────────────────────────
+  // Revoke ALL permissions for a moderator
+  async function handleRevokeAll(moderator: ModeratorWithPermissions) {
+    const allFalse: PermissionUpdate = {};
+    for (const f of PERMISSION_FIELDS) {
+      allFalse[f.key] = false;
+    }
+
+    setModerators((prev) =>
+      prev.map((m) =>
+        m.id === moderator.id
+          ? { ...m, permissions: { ...m.permissions, ...allFalse } }
+          : m
+      )
+    );
+
+    const res = await setModeratorPermissionsAction(moderator.id, allFalse);
+    if (res.error) {
+      showToast("error", res.error);
+      loadData();
+    } else {
+      showToast("info", `Revoked all permissions from ${moderator.name}.`);
+    }
+  }
+
+  // Filter change handlers
+  const handleFilterChange = (newFilters: Partial<PermissionFilterState>) => {
+    setFilters((prev) => ({ ...prev, ...newFilters }));
+  };
+
+  const handleResetFilters = () => {
+    setFilters({
+      search: "",
+      accessLevel: "all",
+    });
+  };
+
   return (
-    <div>
+    <div className="w-full space-y-6">
+      {/* Toast Notification */}
+      <PermissionsToast toast={toast} onClose={() => setToast(null)} />
+
       {/* Header */}
-      <div className="mb-6 flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-bold text-gray-900">
-            Moderator Permissions
-          </h1>
-          <p className="mt-0.5 text-sm text-gray-500">
-            প্রতিটি মডারেটরের জন্য নির্দিষ্ট পারমিশন চালু / বন্ধ করুন
-          </p>
-        </div>
-        <button
-          onClick={load}
-          className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-800"
-        >
-          <RefreshCw className="size-4" /> Refresh
-        </button>
-      </div>
+      <PermissionsHeader
+        totalCount={moderators.length}
+        loading={loading}
+        onRefresh={loadData}
+      />
 
-      {/* Toast */}
-      {toast && (
-        <div
-          className={`mb-4 flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium shadow ${
-            toast.ok
-              ? "bg-green-50 text-green-700 border border-green-200"
-              : "bg-red-50 text-red-700 border border-red-200"
-          }`}
-        >
-          {toast.ok ? (
-            <CheckCircle className="size-4 shrink-0" />
-          ) : (
-            <AlertCircle className="size-4 shrink-0" />
-          )}
-          {toast.msg}
-        </div>
-      )}
+      {/* KPI Insight Metric Cards */}
+      <PermissionsInsightCards
+        insights={insights}
+        activeFilter={filters.accessLevel}
+        onSelectFilter={(filter: PermissionAccessFilter) => {
+          handleFilterChange({
+            accessLevel: filters.accessLevel === filter ? "all" : filter,
+          });
+        }}
+      />
 
-      {loadError && (
-        <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-          {loadError}
-        </div>
-      )}
+      {/* Filter and Search Bar */}
+      <PermissionsFilterBar
+        filters={filters}
+        onFilterChange={handleFilterChange}
+        onResetFilters={handleResetFilters}
+      />
 
-      {loading ? (
-        <div className="flex items-center justify-center py-16 text-gray-400">
-          <RefreshCw className="mr-2 size-5 animate-spin" /> লোড হচ্ছে...
-        </div>
-      ) : moderators.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-gray-200 py-16 text-center">
-          <ShieldCheck className="mx-auto mb-3 size-12 text-gray-300" />
-          <p className="font-medium text-gray-500">কোনো মডারেটর নেই</p>
-          <p className="mt-1 text-sm text-gray-400">
-            Users পাতায় গিয়ে কাউকে Moderator রোল দিন, তারপর এখানে তাদের
-            পারমিশন সেট করুন।
-          </p>
-        </div>
-      ) : (
-        <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white shadow-sm">
-          <table className="w-full text-sm">
-            {/* Column headers */}
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="sticky left-0 z-10 bg-gray-50 px-5 py-4 text-left text-xs font-semibold uppercase tracking-wide text-gray-500 min-w-[200px]">
-                  Moderator
-                </th>
-                {PERMISSION_FIELDS.map(({ key, label }) => (
-                  <th
-                    key={key}
-                    className="px-4 py-4 text-center text-xs font-semibold uppercase tracking-wide text-gray-500 min-w-[120px]"
-                  >
-                    {/* Split label at " — " for two-line display */}
-                    <span className="block leading-tight">
-                      {label.split(" — ")[0]}
-                    </span>
-                    <span className="block text-[10px] font-normal text-gray-400 leading-tight">
-                      {label.split(" — ")[1]}
-                    </span>
-                  </th>
-                ))}
-                <th className="px-4 py-4 text-center text-xs font-semibold uppercase tracking-wide text-gray-500 min-w-[110px]">
-                  Quick Set
-                </th>
-              </tr>
-            </thead>
+      {/* Main Interactive Permissions Matrix Table */}
+      <PermissionsMatrixTable
+        moderators={filteredModerators}
+        loading={loading}
+        savingKey={savingKey}
+        onToggle={handleToggle}
+        onGrantAll={handleGrantAll}
+        onRevokeAll={handleRevokeAll}
+        onView={(m) => setViewingModerator(m)}
+      />
 
-            <tbody className="divide-y divide-gray-100">
-              {moderators.map((mod) => {
-                const allGranted = PERMISSION_FIELDS.every(
-                  ({ key }) => mod.permissions[key],
-                );
-                const isSavingRow = savingKey === mod.id;
+      {/* ── Modals ────────────────────────────────────────────────────────── */}
 
-                return (
-                  <tr key={mod.id} className="hover:bg-gray-50/70 transition-colors">
-                    {/* Moderator info */}
-                    <td className="sticky left-0 bg-white px-5 py-4 hover:bg-gray-50/70">
-                      <div className="flex items-center gap-3">
-                        <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-blue-100 text-sm font-bold text-blue-700">
-                          {mod.name.charAt(0).toUpperCase()}
-                        </div>
-                        <div className="min-w-0">
-                          <p className="truncate font-semibold text-gray-900">
-                            {mod.name}
-                          </p>
-                          <p className="truncate text-xs text-gray-400">
-                            {mod.email}
-                          </p>
-                        </div>
-                      </div>
-                    </td>
-
-                    {/* Permission checkboxes */}
-                    {PERMISSION_FIELDS.map(({ key }) => {
-                      const cellKey = `${mod.id}:${key}`;
-                      const isSaving = savingKey === cellKey || isSavingRow;
-                      const isEnabled = mod.permissions[key];
-
-                      return (
-                        <td key={key} className="px-4 py-4 text-center">
-                          <button
-                            onClick={() => handleToggle(mod, key)}
-                            disabled={isSaving}
-                            aria-label={`Toggle ${key} for ${mod.name}`}
-                            aria-pressed={isEnabled}
-                            className={`relative mx-auto flex size-7 items-center justify-center rounded-lg border-2 transition-all disabled:opacity-50 ${
-                              isEnabled
-                                ? "border-red-500 bg-red-500 text-white hover:bg-red-600 hover:border-red-600"
-                                : "border-gray-200 bg-white text-transparent hover:border-red-300 hover:bg-red-50"
-                            }`}
-                          >
-                            {isSaving ? (
-                              <RefreshCw className="size-3.5 animate-spin text-gray-400" />
-                            ) : (
-                              <svg
-                                className="size-3.5"
-                                viewBox="0 0 12 12"
-                                fill="none"
-                              >
-                                <path
-                                  d="M2 6l3 3 5-5"
-                                  stroke="currentColor"
-                                  strokeWidth="2"
-                                  strokeLinecap="round"
-                                  strokeLinejoin="round"
-                                />
-                              </svg>
-                            )}
-                          </button>
-                        </td>
-                      );
-                    })}
-
-                    {/* Quick set: grant all / revoke all */}
-                    <td className="px-4 py-4 text-center">
-                      <div className="flex flex-col items-center gap-1.5">
-                        <button
-                          onClick={() => handleGrantAll(mod, true)}
-                          disabled={allGranted || savingKey === mod.id}
-                          className="w-full rounded-md bg-green-50 px-2.5 py-1 text-xs font-medium text-green-700 hover:bg-green-100 disabled:opacity-40 disabled:cursor-not-allowed"
-                        >
-                          সব চালু
-                        </button>
-                        <button
-                          onClick={() => handleGrantAll(mod, false)}
-                          disabled={!allGranted && PERMISSION_FIELDS.every(({ key }) => !mod.permissions[key]) || savingKey === mod.id}
-                          className="w-full rounded-md bg-red-50 px-2.5 py-1 text-xs font-medium text-red-600 hover:bg-red-100 disabled:opacity-40 disabled:cursor-not-allowed"
-                        >
-                          সব বন্ধ
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
-
-      {/* Legend */}
-      {!loading && moderators.length > 0 && (
-        <p className="mt-3 text-xs text-gray-400">
-          {moderators.length} জন মডারেটর · পারমিশন পরিবর্তন তাৎক্ষণিকভাবে সংরক্ষিত হয়
-        </p>
+      {/* View Moderator Scope Modal */}
+      {viewingModerator && (
+        <ModeratorViewModal
+          moderator={viewingModerator}
+          onClose={() => setViewingModerator(null)}
+        />
       )}
     </div>
   );

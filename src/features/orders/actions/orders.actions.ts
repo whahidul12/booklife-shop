@@ -285,3 +285,46 @@ export async function getAllOrdersAction(): Promise<
     return { error: "অর্ডার লোড করা যায়নি" };
   }
 }
+
+export async function getOrderDetailsWithItemsAction(
+  orderId: string,
+): Promise<
+  ActionResult<{
+    order: typeof orders.$inferSelect;
+    items: (typeof orderItems.$inferSelect)[];
+  }>
+> {
+  try {
+    await requirePermission({ orders: ["view"] });
+    const [order] = await db
+      .select()
+      .from(orders)
+      .where(eq(orders.id, orderId));
+
+    if (!order) return { error: "অর্ডার পাওয়া যায়নি" };
+
+    const items = await db
+      .select()
+      .from(orderItems)
+      .where(eq(orderItems.orderId, orderId));
+
+    return { data: { order, items } };
+  } catch (err) {
+    if (err instanceof ActionError) return { error: err.message };
+    return { error: "অর্ডার বিবরণ লোড করা যায়নি" };
+  }
+}
+
+export async function deleteOrderAction(
+  orderId: string,
+): Promise<ActionResult<void>> {
+  try {
+    await requirePermission({ orders: ["cancel"] });
+    await db.delete(orders).where(eq(orders.id, orderId));
+    return { data: undefined };
+  } catch (err) {
+    if (err instanceof ActionError) return { error: err.message };
+    return { error: "অর্ডার মুছে ফেলা যায়নি" };
+  }
+}
+

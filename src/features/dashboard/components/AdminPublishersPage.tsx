@@ -1,274 +1,290 @@
 "use client";
 
-import { useEffect, useActionState, useState } from "react";
-import { Trash2, Plus, RefreshCw, X, Pencil } from "lucide-react";
-import {
-  getPublishersAction,
-  createPublisherAction,
-  deletePublisherAction,
-  updatePublisherAction,
-} from "@/features/books/actions/taxonomy.actions";
-import { CloudinaryImageUpload } from "./CloudinaryImageUpload";
+import React, { useEffect, useState, useMemo, useCallback } from "react";
 import type { Publisher } from "@/db/schema";
-
-// ── Edit Modal ─────────────────────────────────────────────────────────────
-
-interface EditPublisherModalProps {
-  publisher: Publisher;
-  onClose:   () => void;
-  onSaved:   () => void;
-}
-
-const editInitial: { error?: string; data?: undefined } = {};
-
-function EditPublisherModal({ publisher, onClose, onSaved }: EditPublisherModalProps) {
-  const boundUpdate = updatePublisherAction.bind(null, publisher.id);
-  const [state, formAction, isPending] = useActionState(boundUpdate, editInitial);
-  const [logoUrl, setLogoUrl] = useState(publisher.logoUrl ?? "");
-  const [submitted, setSubmitted] = useState(false);
-
-  useEffect(() => {
-    if (submitted && !isPending && !state.error) {
-      onSaved();
-      onClose();
-    }
-  }, [submitted, isPending, state.error, onSaved, onClose]);
-
-  function handleAction(fd: FormData) {
-    setSubmitted(true);
-    return formAction(fd);
-  }
-
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4"
-      onClick={(e) => e.target === e.currentTarget && onClose()}
-    >
-      <div className="relative w-full max-w-md rounded-xl bg-white p-6 shadow-2xl">
-        <button
-          type="button"
-          onClick={onClose}
-          className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"
-          aria-label="বন্ধ করুন"
-        >
-          <X className="size-5" />
-        </button>
-
-        <h3 className="mb-5 text-base font-bold text-gray-900">
-          প্রকাশনী সম্পাদনা করুন
-        </h3>
-
-        {state.error && (
-          <p className="mb-4 rounded-lg bg-red-50 px-4 py-2 text-sm text-red-600">
-            {state.error}
-          </p>
-        )}
-
-        <form action={handleAction} className="space-y-4">
-          <div>
-            <label className="mb-1.5 block text-xs font-medium text-gray-600">
-              প্রকাশনীর নাম *
-            </label>
-            <input
-              name="name"
-              required
-              defaultValue={publisher.name}
-              className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-red-400 focus:ring-1 focus:ring-red-400"
-            />
-          </div>
-
-          <CloudinaryImageUpload
-            folder="publishers"
-            label="প্রকাশনীর লোগো"
-            hiddenFieldName="logoUrl"
-            currentUrl={logoUrl || null}
-            onUpload={setLogoUrl}
-          />
-
-          <div className="flex gap-3 pt-2">
-            <button
-              type="submit"
-              disabled={isPending}
-              className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-red-600 py-2.5 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-60"
-            >
-              {isPending ? (
-                <><RefreshCw className="size-4 animate-spin" /> সংরক্ষণ হচ্ছে...</>
-              ) : (
-                "সংরক্ষণ করুন"
-              )}
-            </button>
-            <button
-              type="button"
-              onClick={onClose}
-              className="rounded-lg border border-gray-200 px-5 py-2.5 text-sm text-gray-600 hover:bg-gray-50"
-            >
-              বাতিল
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
-  );
-}
-
-// ── Main Page ──────────────────────────────────────────────────────────────
-
-const createInitial: { error?: string; data?: { id: string } } = {};
+import { getPublishersAction } from "@/features/books/actions/taxonomy.actions";
+import {
+  PublishersHeader,
+  PublishersInsightCards,
+  PublishersFilterBar,
+  PublishersTable,
+  PublishersPagination,
+  PublisherViewModal,
+  PublisherEditModal,
+  PublisherCreateModal,
+  PublisherDeleteModal,
+  PublishersToast,
+  type PublisherFilterState,
+  type PublisherLogoFilter,
+  type PublisherInsights,
+  type ToastMessage,
+} from "./publishers";
 
 export function AdminPublishersPage() {
-  const [rows, setRows]           = useState<Publisher[]>([]);
-  const [loading, setLoading]     = useState(true);
-  const [deleteError, setDeleteError] = useState<string | null>(null);
-  const [logoUrl, setLogoUrl]     = useState("");
-  const [editingPublisher, setEditingPublisher] = useState<Publisher | null>(null);
+  const [publishers, setPublishers] = useState<Publisher[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const [createState, createAction, isPending] = useActionState(
-    createPublisherAction,
-    createInitial,
+  // Modals state
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [viewingPublisher, setViewingPublisher] = useState<Publisher | null>(null);
+  const [editingPublisher, setEditingPublisher] = useState<Publisher | null>(null);
+  const [deletingPublisher, setDeletingPublisher] = useState<Publisher | null>(null);
+
+  // Selection state
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+
+  // Toast state
+  const [toast, setToast] = useState<ToastMessage | null>(null);
+
+  // Filters state
+  const [filters, setFilters] = useState<PublisherFilterState>({
+    search: "",
+    logoStatus: "all",
+    dateRange: null,
+  });
+
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+
+  // Show Toast helper
+  const showToast = useCallback(
+    (type: "success" | "error" | "info", message: string) => {
+      setToast({
+        id: Math.random().toString(36).slice(2),
+        type,
+        message,
+      });
+    },
+    []
   );
 
-  async function load() {
+  // Load data
+  const loadData = useCallback(async () => {
     setLoading(true);
-    const res = await getPublishersAction();
-    if (res.data) setRows(res.data);
-    setLoading(false);
-  }
-
-  useEffect(() => { load(); }, []);
+    try {
+      const res = await getPublishersAction();
+      if (res.data) setPublishers(res.data);
+    } catch {
+      showToast("error", "Failed to load publishers data");
+    } finally {
+      setLoading(false);
+    }
+  }, [showToast]);
 
   useEffect(() => {
-    if (createState.data) {
-      setLogoUrl("");
-      load();
-    }
-  }, [createState.data]);
+    loadData();
+  }, [loadData]);
 
-  async function handleDelete(id: string) {
-    if (!confirm("এই প্রকাশনীকে মুছে ফেলবেন?")) return;
-    setDeleteError(null);
-    const res = await deletePublisherAction(id);
-    if (res.error) setDeleteError(res.error);
-    else load();
-  }
+  // Calculate Insight Metrics
+  const insights: PublisherInsights = useMemo(() => {
+    let withLogo = 0;
+    let withoutLogo = 0;
+
+    for (const p of publishers) {
+      if (p.logoUrl) {
+        withLogo++;
+      } else {
+        withoutLogo++;
+      }
+    }
+
+    return {
+      total: publishers.length,
+      withLogo,
+      withoutLogo,
+    };
+  }, [publishers]);
+
+  // Filtered publishers
+  const filteredPublishers = useMemo(() => {
+    return publishers.filter((pub) => {
+      // 1. Search by name or ID
+      if (filters.search.trim() !== "") {
+        const query = filters.search.trim().toLowerCase();
+        const matchesName = pub.name.toLowerCase().includes(query);
+        const matchesId = pub.id.toLowerCase().includes(query);
+        if (!matchesName && !matchesId) return false;
+      }
+
+      // 2. Logo status
+      if (filters.logoStatus === "has_logo" && !pub.logoUrl) return false;
+      if (filters.logoStatus === "no_logo" && pub.logoUrl) return false;
+
+      // 3. Date range
+      if (filters.dateRange?.startDate && filters.dateRange?.endDate) {
+        const createdDate = new Date(pub.createdAt).getTime();
+        const start = new Date(filters.dateRange.startDate).setHours(0, 0, 0, 0);
+        const end = new Date(filters.dateRange.endDate).setHours(23, 59, 59, 999);
+        if (createdDate < start || createdDate > end) return false;
+      }
+
+      return true;
+    });
+  }, [publishers, filters]);
+
+  // Paginated slice
+  const paginatedPublishers = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return filteredPublishers.slice(start, start + pageSize);
+  }, [filteredPublishers, currentPage, pageSize]);
+
+  // Selection handlers
+  const handleToggleSelectAll = () => {
+    if (selectedIds.length === paginatedPublishers.length) {
+      setSelectedIds([]);
+    } else {
+      setSelectedIds(paginatedPublishers.map((p) => p.id));
+    }
+  };
+
+  const handleToggleSelectRow = (id: string) => {
+    setSelectedIds((prev) =>
+      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
+    );
+  };
+
+  // Filter change handlers
+  const handleFilterChange = (newFilters: Partial<PublisherFilterState>) => {
+    setFilters((prev) => ({ ...prev, ...newFilters }));
+    setCurrentPage(1);
+  };
+
+  const handleResetFilters = () => {
+    setFilters({
+      search: "",
+      logoStatus: "all",
+      dateRange: null,
+    });
+    setCurrentPage(1);
+  };
 
   return (
-    <div>
-      {editingPublisher && (
-        <EditPublisherModal
-          publisher={editingPublisher}
-          onClose={() => setEditingPublisher(null)}
-          onSaved={() => { setEditingPublisher(null); load(); }}
+    <div className="w-full space-y-6">
+      {/* Toast Notification */}
+      <PublishersToast toast={toast} onClose={() => setToast(null)} />
+
+      {/* Header */}
+      <PublishersHeader
+        totalCount={publishers.length}
+        loading={loading}
+        onRefresh={loadData}
+        onOpenAddModal={() => setIsAddModalOpen(true)}
+      />
+
+      {/* KPI Insight Metric Cards */}
+      <PublishersInsightCards
+        insights={insights}
+        activeStatus={filters.logoStatus}
+        onSelectFilter={(status: PublisherLogoFilter) => {
+          handleFilterChange({
+            logoStatus: filters.logoStatus === status ? "all" : status,
+          });
+        }}
+      />
+
+      {/* Filter and Search Bar */}
+      <PublishersFilterBar
+        filters={filters}
+        onFilterChange={handleFilterChange}
+        onResetFilters={handleResetFilters}
+      />
+
+      {/* Selection Action Bar (when rows are selected) */}
+      {selectedIds.length > 0 && (
+        <div className="flex items-center justify-between rounded-xl bg-red-50 border border-red-100 px-4 py-2.5 text-xs text-gray-700 animate-in fade-in duration-150">
+          <span className="font-semibold text-[#D10A13]">
+            {selectedIds.length} {selectedIds.length === 1 ? "publisher" : "publishers"} selected
+          </span>
+          <button
+            type="button"
+            onClick={() => setSelectedIds([])}
+            className="font-medium text-gray-500 hover:text-gray-800"
+          >
+            Clear selection
+          </button>
+        </div>
+      )}
+
+      {/* Main Table */}
+      <PublishersTable
+        publishers={paginatedPublishers}
+        loading={loading}
+        selectedIds={selectedIds}
+        onToggleSelectAll={handleToggleSelectAll}
+        onToggleSelectRow={handleToggleSelectRow}
+        onViewPublisher={(pub) => setViewingPublisher(pub)}
+        onEditPublisher={(pub) => setEditingPublisher(pub)}
+        onDeletePublisher={(pub) => setDeletingPublisher(pub)}
+      />
+
+      {/* Pagination Footer */}
+      <PublishersPagination
+        currentPage={currentPage}
+        pageSize={pageSize}
+        totalItems={filteredPublishers.length}
+        onPageChange={setCurrentPage}
+        onPageSizeChange={setPageSize}
+      />
+
+      {/* ── Modals ────────────────────────────────────────────────────────── */}
+
+      {/* Add Publisher Modal */}
+      {isAddModalOpen && (
+        <PublisherCreateModal
+          onClose={() => setIsAddModalOpen(false)}
+          onCreated={(name) => {
+            showToast("success", `Publisher "${name}" created successfully!`);
+            loadData();
+          }}
+          onError={(errorMsg) => {
+            showToast("error", errorMsg);
+          }}
         />
       )}
 
-      <div className="mb-6 flex items-center justify-between">
-        <h1 className="text-xl font-bold text-gray-900">Publishers</h1>
-        <button
-          onClick={load}
-          className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-800"
-        >
-          <RefreshCw className="size-4" /> Refresh
-        </button>
-      </div>
-
-      {/* ── Create form ─────────────────────────────────────────────────── */}
-      <form
-        action={createAction}
-        className="mb-8 rounded-xl border border-gray-200 bg-white p-5 shadow-sm"
-      >
-        <h2 className="mb-4 text-sm font-semibold text-gray-700">
-          নতুন প্রকাশনী যোগ করুন
-        </h2>
-
-        {createState.error && (
-          <p className="mb-3 text-sm text-red-600">{createState.error}</p>
-        )}
-
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <div className="sm:col-span-2">
-            <label className="mb-1.5 block text-xs font-medium text-gray-600">
-              প্রকাশনীর নাম (বাংলা) *
-            </label>
-            <input
-              name="name"
-              required
-              placeholder="যেমন: সমকালীন প্রকাশন"
-              className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-red-400 focus:ring-1 focus:ring-red-400"
-            />
-          </div>
-          <div className="sm:col-span-2">
-            <CloudinaryImageUpload
-              folder="publishers"
-              label="প্রকাশনীর লোগো"
-              hiddenFieldName="logoUrl"
-              currentUrl={logoUrl || null}
-              onUpload={setLogoUrl}
-            />
-          </div>
-        </div>
-
-        <button
-          type="submit"
-          disabled={isPending}
-          className="mt-4 flex items-center gap-2 rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-60"
-        >
-          <Plus className="size-4" />
-          {isPending ? "যোগ হচ্ছে..." : "যোগ করুন"}
-        </button>
-      </form>
-
-      {deleteError && (
-        <p className="mb-3 text-sm text-red-600">{deleteError}</p>
+      {/* View Publisher Modal */}
+      {viewingPublisher && (
+        <PublisherViewModal
+          publisher={viewingPublisher}
+          onClose={() => setViewingPublisher(null)}
+          onEdit={() => {
+            const p = viewingPublisher;
+            setViewingPublisher(null);
+            setEditingPublisher(p);
+          }}
+        />
       )}
 
-      {/* ── Table ──────────────────────────────────────────────────────── */}
-      <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
-        <table className="w-full text-sm">
-          <thead className="bg-gray-50 text-xs uppercase tracking-wide text-gray-500">
-            <tr>
-              <th className="px-4 py-3 text-left font-medium">Name</th>
-              <th className="px-4 py-3 text-right font-medium">Actions</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-100">
-            {loading ? (
-              <tr>
-                <td colSpan={2} className="px-4 py-8 text-center text-gray-400">
-                  লোড হচ্ছে...
-                </td>
-              </tr>
-            ) : rows.length === 0 ? (
-              <tr>
-                <td colSpan={2} className="px-4 py-8 text-center text-gray-400">
-                  কোনো প্রকাশনী নেই
-                </td>
-              </tr>
-            ) : (
-              rows.map((r) => (
-                <tr key={r.id} className="hover:bg-gray-50">
-                  <td className="px-4 py-3 font-medium text-gray-900">{r.name}</td>
-                  <td className="px-4 py-3 text-right">
-                    <div className="flex items-center justify-end gap-1">
-                      <button
-                        onClick={() => setEditingPublisher(r)}
-                        className="inline-flex items-center gap-1 rounded-md px-2.5 py-1.5 text-xs font-medium text-blue-600 hover:bg-blue-50"
-                      >
-                        <Pencil className="size-3.5" /> Edit
-                      </button>
-                      <button
-                        onClick={() => handleDelete(r.id)}
-                        className="inline-flex items-center gap-1 rounded-md px-2.5 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50"
-                      >
-                        <Trash2 className="size-3.5" /> Delete
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
+      {/* Edit Publisher Modal */}
+      {editingPublisher && (
+        <PublisherEditModal
+          publisher={editingPublisher}
+          onClose={() => setEditingPublisher(null)}
+          onSaved={(name) => {
+            showToast("success", `Publisher "${name}" updated successfully!`);
+            loadData();
+          }}
+          onError={(errorMsg) => {
+            showToast("error", errorMsg);
+          }}
+        />
+      )}
+
+      {/* Delete Publisher Modal */}
+      {deletingPublisher && (
+        <PublisherDeleteModal
+          publisher={deletingPublisher}
+          onClose={() => setDeletingPublisher(null)}
+          onDeleted={(name) => {
+            showToast("success", `Publisher "${name}" deleted successfully.`);
+            loadData();
+          }}
+          onError={(errorMsg) => {
+            showToast("error", errorMsg);
+          }}
+        />
+      )}
     </div>
   );
 }

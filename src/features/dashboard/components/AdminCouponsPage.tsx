@@ -1,125 +1,329 @@
 "use client";
 
-import { useEffect, useActionState, useState } from "react";
-import { Trash2, Plus, RefreshCw, ToggleLeft, ToggleRight } from "lucide-react";
+import React, { useEffect, useState, useMemo, useCallback } from "react";
+import type { Coupon } from "@/db/schema";
 import {
   getCouponsAction,
-  createCouponAction,
-  deleteCouponAction,
   toggleCouponActiveAction,
 } from "@/features/orders/actions/coupons.actions";
-import type { Coupon } from "@/db/schema";
-
-const createInitial: { error?: string; data?: { id: string } } = {};
+import {
+  CouponsHeader,
+  CouponsInsightCards,
+  CouponsFilterBar,
+  CouponsTable,
+  CouponsPagination,
+  CouponViewModal,
+  CouponEditModal,
+  CouponCreateModal,
+  CouponDeleteModal,
+  CouponsToast,
+  type CouponFilterState,
+  type CouponStatusFilter,
+  type CouponInsights,
+  type ToastMessage,
+} from "./coupons";
 
 export function AdminCouponsPage() {
   const [coupons, setCoupons] = useState<Coupon[]>([]);
   const [loading, setLoading] = useState(true);
-  const [actionError, setActionError] = useState<string | null>(null);
-  const [createState, createAction, isPending] = useActionState(createCouponAction, createInitial);
 
-  async function load() {
+  // Modals state
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [viewingCoupon, setViewingCoupon] = useState<Coupon | null>(null);
+  const [editingCoupon, setEditingCoupon] = useState<Coupon | null>(null);
+  const [deletingCoupon, setDeletingCoupon] = useState<Coupon | null>(null);
+
+  // Selection state
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+
+  // Toast state
+  const [toast, setToast] = useState<ToastMessage | null>(null);
+
+  // Filters state
+  const [filters, setFilters] = useState<CouponFilterState>({
+    search: "",
+    status: "all",
+    dateRange: null,
+  });
+
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+
+  // Show Toast helper
+  const showToast = useCallback(
+    (type: "success" | "error" | "info", message: string) => {
+      setToast({
+        id: Math.random().toString(36).slice(2),
+        type,
+        message,
+      });
+    },
+    []
+  );
+
+  // Load coupons
+  const loadData = useCallback(async () => {
     setLoading(true);
-    const res = await getCouponsAction();
-    if (res.data) setCoupons(res.data);
-    setLoading(false);
+    try {
+      const res = await getCouponsAction();
+      if (res.data) setCoupons(res.data);
+    } catch {
+      showToast("error", "Failed to load coupons data");
+    } finally {
+      setLoading(false);
+    }
+  }, [showToast]);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
+
+  // Calculate Insight Metrics
+  const insights: CouponInsights = useMemo(() => {
+    let activeCount = 0;
+    let expiredCount = 0;
+    let totalUses = 0;
+
+    const now = new Date();
+
+    for (const c of coupons) {
+      totalUses += c.usedCount;
+      const isExpired = c.expiresAt && new Date(c.expiresAt) < now;
+      if (c.isActive && !isExpired) {
+        activeCount++;
+      } else {
+        expiredCount++;
+      }
+    }
+
+    return {
+      total: coupons.length,
+      activeCount,
+      totalUses,
+      expiredCount,
+    };
+  }, [coupons]);
+
+  // Filtered coupons
+  const filteredCoupons = useMemo(() => {
+    const now = new Date();
+
+    return coupons.filter((c) => {
+      // 1. Search by code
+      if (filters.search.trim() !== "") {
+        const query = filters.search.trim().toUpperCase();
+        if (!c.code.toUpperCase().includes(query)) return false;
+      }
+
+      const isExpired = c.expiresAt && new Date(c.expiresAt) < now;
+      const isMaxed = c.maxUses !== null && c.usedCount >= c.maxUses;
+
+      // 2. Status
+      if (filters.status === "active") {
+        if (!c.isActive || isExpired || isMaxed) return false;
+      } else if (filters.status === "inactive") {
+        if (c.isActive) return false;
+      } else if (filters.status === "expired") {
+        if (!isExpired) return false;
+      } else if (filters.status === "maxed") {
+        if (!isMaxed) return false;
+      }
+
+      // 3. Date range
+      if (filters.dateRange?.startDate && filters.dateRange?.endDate) {
+        const createdDate = new Date(c.createdAt).getTime();
+        const start = new Date(filters.dateRange.startDate).setHours(0, 0, 0, 0);
+        const end = new Date(filters.dateRange.endDate).setHours(23, 59, 59, 999);
+        if (createdDate < start || createdDate > end) return false;
+      }
+
+      return true;
+    });
+  }, [coupons, filters]);
+
+  // Paginated coupons slice
+  const paginatedCoupons = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return filteredCoupons.slice(start, start + pageSize);
+  }, [filteredCoupons, currentPage, pageSize]);
+
+  // Toggle Active Status
+  async function handleToggleActive(coupon: Coupon) {
+    try {
+      const res = await toggleCouponActiveAction(coupon.id, !coupon.isActive);
+      if (res.error) {
+        showToast("error", res.error);
+      } else {
+        showToast(
+          "success",
+          `Coupon "${coupon.code}" is now ${!coupon.isActive ? "active" : "inactive"}.`
+        );
+        loadData();
+      }
+    } catch {
+      showToast("error", "Failed to update coupon status");
+    }
   }
 
-  useEffect(() => { load(); }, []);
-  useEffect(() => { if (createState.data) load(); }, [createState.data]);
+  // Selection handlers
+  const handleToggleSelectAll = () => {
+    if (selectedIds.length === paginatedCoupons.length) {
+      setSelectedIds([]);
+    } else {
+      setSelectedIds(paginatedCoupons.map((c) => c.id));
+    }
+  };
 
-  async function handleDelete(id: string) {
-    setActionError(null);
-    const res = await deleteCouponAction(id);
-    if (res.error) setActionError(res.error);
-    else load();
-  }
+  const handleToggleSelectRow = (id: string) => {
+    setSelectedIds((prev) =>
+      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
+    );
+  };
 
-  async function handleToggle(id: string, current: boolean) {
-    setActionError(null);
-    const res = await toggleCouponActiveAction(id, !current);
-    if (res.error) setActionError(res.error);
-    else load();
-  }
+  // Filter handlers
+  const handleFilterChange = (newFilters: Partial<CouponFilterState>) => {
+    setFilters((prev) => ({ ...prev, ...newFilters }));
+    setCurrentPage(1);
+  };
+
+  const handleResetFilters = () => {
+    setFilters({
+      search: "",
+      status: "all",
+      dateRange: null,
+    });
+    setCurrentPage(1);
+  };
 
   return (
-    <div>
-      <div className="mb-6 flex items-center justify-between">
-        <h1 className="text-xl font-bold text-gray-900">Coupons</h1>
-        <button onClick={load} className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-800">
-          <RefreshCw className="size-4" /> Refresh
-        </button>
-      </div>
+    <div className="w-full space-y-6">
+      {/* Toast Notification */}
+      <CouponsToast toast={toast} onClose={() => setToast(null)} />
 
-      <form action={createAction} className="mb-8 rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-        <h2 className="mb-4 text-sm font-semibold text-gray-700">নতুন কুপন তৈরি করুন</h2>
-        {createState.error && <p className="mb-3 text-sm text-red-600">{createState.error}</p>}
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <input name="code" required placeholder="কুপন কোড (e.g. EID50)"
-            className="rounded-lg border border-gray-200 px-3 py-2 text-sm uppercase outline-none focus:border-red-400 focus:ring-1 focus:ring-red-400" />
-          <input name="discountTaka" type="number" required min="1" step="1" placeholder="ছাড়ের পরিমাণ (৳)"
-            className="rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-red-400 focus:ring-1 focus:ring-red-400" />
-          <input name="maxUses" type="number" min="1" placeholder="সর্বোচ্চ ব্যবহার (খালি = সীমাহীন)"
-            className="rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-red-400 focus:ring-1 focus:ring-red-400" />
-          <input name="expiresAt" type="datetime-local" placeholder="মেয়াদ শেষ তারিখ"
-            className="rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-red-400 focus:ring-1 focus:ring-red-400" />
+      {/* Header */}
+      <CouponsHeader
+        totalCount={coupons.length}
+        loading={loading}
+        onRefresh={loadData}
+        onOpenAddModal={() => setIsAddModalOpen(true)}
+      />
+
+      {/* KPI Insight Metric Cards */}
+      <CouponsInsightCards
+        insights={insights}
+        activeStatus={filters.status}
+        onSelectFilter={(status: CouponStatusFilter) => {
+          handleFilterChange({
+            status: filters.status === status ? "all" : status,
+          });
+        }}
+      />
+
+      {/* Filter and Search Bar */}
+      <CouponsFilterBar
+        filters={filters}
+        onFilterChange={handleFilterChange}
+        onResetFilters={handleResetFilters}
+      />
+
+      {/* Selection Action Bar (when rows are selected) */}
+      {selectedIds.length > 0 && (
+        <div className="flex items-center justify-between rounded-xl bg-red-50 border border-red-100 px-4 py-2.5 text-xs text-gray-700 animate-in fade-in duration-150">
+          <span className="font-semibold text-[#D10A13]">
+            {selectedIds.length} {selectedIds.length === 1 ? "coupon" : "coupons"} selected
+          </span>
+          <button
+            type="button"
+            onClick={() => setSelectedIds([])}
+            className="font-medium text-gray-500 hover:text-gray-800"
+          >
+            Clear selection
+          </button>
         </div>
-        <button type="submit" disabled={isPending}
-          className="mt-3 flex items-center gap-2 rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-60">
-          <Plus className="size-4" />
-          {isPending ? "তৈরি হচ্ছে..." : "তৈরি করুন"}
-        </button>
-      </form>
+      )}
 
-      {actionError && <p className="mb-3 text-sm text-red-600">{actionError}</p>}
+      {/* Main Coupons Table */}
+      <CouponsTable
+        coupons={paginatedCoupons}
+        loading={loading}
+        selectedIds={selectedIds}
+        onToggleSelectAll={handleToggleSelectAll}
+        onToggleSelectRow={handleToggleSelectRow}
+        onViewCoupon={(c) => setViewingCoupon(c)}
+        onEditCoupon={(c) => setEditingCoupon(c)}
+        onToggleActiveCoupon={handleToggleActive}
+        onDeleteCoupon={(c) => setDeletingCoupon(c)}
+      />
 
-      <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-x-auto">
-        <table className="w-full min-w-[640px] text-sm">
-          <thead className="bg-gray-50 text-xs uppercase tracking-wide text-gray-500">
-            <tr>
-              <th className="px-4 py-3 text-left font-medium">Code</th>
-              <th className="px-4 py-3 text-left font-medium">Discount (৳)</th>
-              <th className="px-4 py-3 text-left font-medium">Uses</th>
-              <th className="px-4 py-3 text-left font-medium">Expires</th>
-              <th className="px-4 py-3 text-left font-medium">Active</th>
-              <th className="px-4 py-3 text-right font-medium">Actions</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-100">
-            {loading ? (
-              <tr><td colSpan={6} className="px-4 py-8 text-center text-gray-400">লোড হচ্ছে...</td></tr>
-            ) : coupons.length === 0 ? (
-              <tr><td colSpan={6} className="px-4 py-8 text-center text-gray-400">কোনো কুপন নেই</td></tr>
-            ) : coupons.map((c) => (
-              <tr key={c.id} className="hover:bg-gray-50">
-                <td className="px-4 py-3 font-mono font-semibold text-gray-900">{c.code}</td>
-                <td className="px-4 py-3 text-gray-700">{(c.discountPaisa / 100).toFixed(0)}</td>
-                <td className="px-4 py-3 text-gray-600">
-                  {c.usedCount}{c.maxUses !== null ? ` / ${c.maxUses}` : ""}
-                </td>
-                <td className="px-4 py-3 text-gray-500 text-xs">
-                  {c.expiresAt
-                    ? new Date(c.expiresAt).toLocaleDateString("bn-BD")
-                    : "—"}
-                </td>
-                <td className="px-4 py-3">
-                  <button onClick={() => handleToggle(c.id, c.isActive)}
-                    className={`inline-flex items-center gap-1 text-xs font-medium ${c.isActive ? "text-green-600" : "text-gray-400"}`}>
-                    {c.isActive ? <ToggleRight className="size-4" /> : <ToggleLeft className="size-4" />}
-                    {c.isActive ? "Active" : "Inactive"}
-                  </button>
-                </td>
-                <td className="px-4 py-3 text-right">
-                  <button onClick={() => handleDelete(c.id)}
-                    className="inline-flex items-center gap-1 rounded-md px-2.5 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50">
-                    <Trash2 className="size-3.5" /> Delete
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      {/* Pagination Footer */}
+      <CouponsPagination
+        currentPage={currentPage}
+        pageSize={pageSize}
+        totalItems={filteredCoupons.length}
+        onPageChange={setCurrentPage}
+        onPageSizeChange={setPageSize}
+      />
+
+      {/* ── Modals ────────────────────────────────────────────────────────── */}
+
+      {/* Add Coupon Modal */}
+      {isAddModalOpen && (
+        <CouponCreateModal
+          onClose={() => setIsAddModalOpen(false)}
+          onCreated={(code) => {
+            showToast("success", `Coupon "${code}" created successfully!`);
+            loadData();
+          }}
+          onError={(errorMsg) => {
+            showToast("error", errorMsg);
+          }}
+        />
+      )}
+
+      {/* View Coupon Details Modal */}
+      {viewingCoupon && (
+        <CouponViewModal
+          coupon={viewingCoupon}
+          onClose={() => setViewingCoupon(null)}
+          onEdit={() => {
+            const c = viewingCoupon;
+            setViewingCoupon(null);
+            setEditingCoupon(c);
+          }}
+          onToggleActive={() => handleToggleActive(viewingCoupon)}
+        />
+      )}
+
+      {/* Edit Coupon Modal */}
+      {editingCoupon && (
+        <CouponEditModal
+          coupon={editingCoupon}
+          onClose={() => setEditingCoupon(null)}
+          onSaved={(code) => {
+            showToast("success", `Coupon "${code}" updated successfully!`);
+            loadData();
+          }}
+          onError={(errorMsg) => {
+            showToast("error", errorMsg);
+          }}
+        />
+      )}
+
+      {/* Delete Coupon Modal */}
+      {deletingCoupon && (
+        <CouponDeleteModal
+          coupon={deletingCoupon}
+          onClose={() => setDeletingCoupon(null)}
+          onDeleted={(code) => {
+            showToast("success", `Coupon "${code}" deleted successfully.`);
+            loadData();
+          }}
+          onError={(errorMsg) => {
+            showToast("error", errorMsg);
+          }}
+        />
+      )}
     </div>
   );
 }

@@ -1,251 +1,319 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { Trash2, Plus, RefreshCw, ToggleLeft, ToggleRight } from "lucide-react";
-import Image from "next/image";
+import React, { useEffect, useState, useMemo, useCallback } from "react";
+import type { Banner } from "@/db/schema";
 import {
   getAllBannersAction,
-  deleteBannerAction,
+  toggleBannerActiveAction,
 } from "@/features/banners/actions/banners.actions";
-import { CloudinaryImageUpload } from "./CloudinaryImageUpload";
-import type { Banner } from "@/db/schema";
-
-// We call createBannerAction manually so we can include the cloudinary URL
-// in the same submission — cannot use useActionState here because the image
-// URL is set asynchronously by the upload component.
-
-interface CreateBannerForm {
-  type:       "hero" | "category";
-  title:      string;
-  imageUrl:   string;
-  linkUrl:    string;
-  sortOrder:  string;
-}
-
-const EMPTY_FORM: CreateBannerForm = {
-  type:      "hero",
-  title:     "",
-  imageUrl:  "",
-  linkUrl:   "",
-  sortOrder: "0",
-};
+import {
+  BannersHeader,
+  BannersInsightCards,
+  BannersFilterBar,
+  BannersTable,
+  BannersPagination,
+  BannerViewModal,
+  BannerEditModal,
+  BannerCreateModal,
+  BannerDeleteModal,
+  BannersToast,
+  type BannerFilterState,
+  type BannerTypeFilter,
+  type BannerInsights,
+  type ToastMessage,
+} from "./banners";
 
 export function AdminBannersPage() {
-  const [banners, setBanners]       = useState<Banner[]>([]);
-  const [loading, setLoading]       = useState(true);
-  const [deleteError, setDeleteError] = useState<string | null>(null);
-  const [form, setForm]             = useState<CreateBannerForm>(EMPTY_FORM);
-  const [creating, setCreating]     = useState(false);
-  const [createError, setCreateError] = useState<string | null>(null);
+  const [banners, setBanners] = useState<Banner[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  async function load() {
+  // Modals state
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [viewingBanner, setViewingBanner] = useState<Banner | null>(null);
+  const [editingBanner, setEditingBanner] = useState<Banner | null>(null);
+  const [deletingBanner, setDeletingBanner] = useState<Banner | null>(null);
+
+  // Selection state
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+
+  // Toast state
+  const [toast, setToast] = useState<ToastMessage | null>(null);
+
+  // Filters state
+  const [filters, setFilters] = useState<BannerFilterState>({
+    search: "",
+    type: "all",
+    status: "all",
+    dateRange: null,
+  });
+
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+
+  // Show Toast helper
+  const showToast = useCallback(
+    (type: "success" | "error" | "info", message: string) => {
+      setToast({
+        id: Math.random().toString(36).slice(2),
+        type,
+        message,
+      });
+    },
+    []
+  );
+
+  // Load data
+  const loadData = useCallback(async () => {
     setLoading(true);
-    const res = await getAllBannersAction();
-    if (res.data) setBanners(res.data);
-    setLoading(false);
-  }
-
-  useEffect(() => { load(); }, []);
-
-  function handleField(
-    e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>,
-  ) {
-    setForm((p) => ({ ...p, [e.target.name]: e.target.value }));
-  }
-
-  async function handleCreate(e: React.FormEvent) {
-    e.preventDefault();
-    if (!form.imageUrl) {
-      setCreateError("ব্যানারের ছবি আপলোড করুন");
-      return;
+    try {
+      const res = await getAllBannersAction();
+      if (res.data) setBanners(res.data);
+    } catch {
+      showToast("error", "Failed to load banners data");
+    } finally {
+      setLoading(false);
     }
-    setCreateError(null);
-    setCreating(true);
+  }, [showToast]);
 
-    const { createBannerAction } = await import(
-      "@/features/banners/actions/banners.actions"
-    );
-    const fd = new FormData();
-    fd.set("type",      form.type);
-    fd.set("title",     form.title);
-    fd.set("imageUrl",  form.imageUrl);
-    fd.set("linkUrl",   form.linkUrl);
-    fd.set("sortOrder", form.sortOrder);
-    fd.set("isActive",  "true");
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
 
-    const res = await createBannerAction(undefined, fd);
-    setCreating(false);
+  // Calculate Insight Metrics
+  const insights: BannerInsights = useMemo(() => {
+    let activeCount = 0;
+    let heroCount = 0;
+    let categoryCount = 0;
 
-    if (res.error) {
-      setCreateError(res.error);
+    for (const b of banners) {
+      if (b.isActive) activeCount++;
+      if (b.type === "hero") heroCount++;
+      if (b.type === "category") categoryCount++;
+    }
+
+    return {
+      total: banners.length,
+      activeCount,
+      heroCount,
+      categoryCount,
+    };
+  }, [banners]);
+
+  // Filtered banners
+  const filteredBanners = useMemo(() => {
+    return banners.filter((banner) => {
+      // 1. Search by title, linkUrl, or ID
+      if (filters.search.trim() !== "") {
+        const query = filters.search.trim().toLowerCase();
+        const matchesTitle = (banner.title || "").toLowerCase().includes(query);
+        const matchesLink = (banner.linkUrl || "").toLowerCase().includes(query);
+        const matchesId = banner.id.toLowerCase().includes(query);
+        if (!matchesTitle && !matchesLink && !matchesId) return false;
+      }
+
+      // 2. Banner type
+      if (filters.type === "hero" && banner.type !== "hero") return false;
+      if (filters.type === "category" && banner.type !== "category") return false;
+
+      // 3. Status
+      if (filters.status === "active" && !banner.isActive) return false;
+      if (filters.status === "inactive" && banner.isActive) return false;
+
+      // 4. Date range
+      if (filters.dateRange?.startDate && filters.dateRange?.endDate) {
+        const createdDate = new Date(banner.createdAt).getTime();
+        const start = new Date(filters.dateRange.startDate).setHours(0, 0, 0, 0);
+        const end = new Date(filters.dateRange.endDate).setHours(23, 59, 59, 999);
+        if (createdDate < start || createdDate > end) return false;
+      }
+
+      return true;
+    });
+  }, [banners, filters]);
+
+  // Paginated slice
+  const paginatedBanners = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return filteredBanners.slice(start, start + pageSize);
+  }, [filteredBanners, currentPage, pageSize]);
+
+  // Toggle active status
+  async function handleToggleActive(banner: Banner) {
+    try {
+      const res = await toggleBannerActiveAction(banner.id, !banner.isActive);
+      if (res.error) {
+        showToast("error", res.error);
+      } else {
+        showToast(
+          "success",
+          `Banner "${banner.title || banner.id}" is now ${!banner.isActive ? "active" : "inactive"}.`
+        );
+        loadData();
+      }
+    } catch {
+      showToast("error", "Failed to update banner status");
+    }
+  }
+
+  // Selection handlers
+  const handleToggleSelectAll = () => {
+    if (selectedIds.length === paginatedBanners.length) {
+      setSelectedIds([]);
     } else {
-      setForm(EMPTY_FORM);
-      load();
+      setSelectedIds(paginatedBanners.map((b) => b.id));
     }
-  }
+  };
 
-  async function handleDelete(id: string) {
-    setDeleteError(null);
-    const res = await deleteBannerAction(id);
-    if (res.error) setDeleteError(res.error);
-    else load();
-  }
+  const handleToggleSelectRow = (id: string) => {
+    setSelectedIds((prev) =>
+      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
+    );
+  };
+
+  // Filter change handlers
+  const handleFilterChange = (newFilters: Partial<BannerFilterState>) => {
+    setFilters((prev) => ({ ...prev, ...newFilters }));
+    setCurrentPage(1);
+  };
+
+  const handleResetFilters = () => {
+    setFilters({
+      search: "",
+      type: "all",
+      status: "all",
+      dateRange: null,
+    });
+    setCurrentPage(1);
+  };
 
   return (
-    <div>
-      <div className="mb-6 flex items-center justify-between">
-        <h1 className="text-xl font-bold text-gray-900">Banners</h1>
-        <button
-          onClick={load}
-          className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-800"
-        >
-          <RefreshCw className="size-4" /> Refresh
-        </button>
-      </div>
+    <div className="w-full space-y-6">
+      {/* Toast Notification */}
+      <BannersToast toast={toast} onClose={() => setToast(null)} />
 
-      {/* ── Create form ─────────────────────────────────────────────────── */}
-      <form
-        onSubmit={handleCreate}
-        className="mb-8 rounded-xl border border-gray-200 bg-white p-5 shadow-sm"
-      >
-        <h2 className="mb-4 text-sm font-semibold text-gray-700">
-          নতুন ব্যানার যোগ করুন
-        </h2>
+      {/* Header */}
+      <BannersHeader
+        totalCount={banners.length}
+        loading={loading}
+        onRefresh={loadData}
+        onOpenAddModal={() => setIsAddModalOpen(true)}
+      />
 
-        {createError && (
-          <p className="mb-3 text-sm text-red-600">{createError}</p>
-        )}
+      {/* KPI Insight Metric Cards */}
+      <BannersInsightCards
+        insights={insights}
+        activeType={filters.type}
+        onSelectType={(type: BannerTypeFilter) => {
+          handleFilterChange({
+            type: filters.type === type ? "all" : type,
+          });
+        }}
+      />
 
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {/* Type */}
-          <select
-            name="type"
-            value={form.type}
-            onChange={handleField}
-            className="rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-red-400 focus:ring-1 focus:ring-red-400"
+      {/* Filter and Search Bar */}
+      <BannersFilterBar
+        filters={filters}
+        onFilterChange={handleFilterChange}
+        onResetFilters={handleResetFilters}
+      />
+
+      {/* Selection Action Bar (when rows are selected) */}
+      {selectedIds.length > 0 && (
+        <div className="flex items-center justify-between rounded-xl bg-red-50 border border-red-100 px-4 py-2.5 text-xs text-gray-700 animate-in fade-in duration-150">
+          <span className="font-semibold text-[#D10A13]">
+            {selectedIds.length} {selectedIds.length === 1 ? "banner" : "banners"} selected
+          </span>
+          <button
+            type="button"
+            onClick={() => setSelectedIds([])}
+            className="font-medium text-gray-500 hover:text-gray-800"
           >
-            <option value="hero">Hero Banner</option>
-            <option value="category">Category Banner</option>
-          </select>
-
-          {/* Title */}
-          <input
-            name="title"
-            value={form.title}
-            onChange={handleField}
-            placeholder="ব্যানারের শিরোনাম"
-            className="rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-red-400 focus:ring-1 focus:ring-red-400"
-          />
-
-          {/* Sort order */}
-          <input
-            name="sortOrder"
-            type="number"
-            value={form.sortOrder}
-            onChange={handleField}
-            placeholder="Sort order (0)"
-            className="rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-red-400 focus:ring-1 focus:ring-red-400"
-          />
-
-          {/* Link URL */}
-          <input
-            name="linkUrl"
-            value={form.linkUrl}
-            onChange={handleField}
-            placeholder="ক্লিক লিঙ্ক (URL)"
-            className="rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-red-400 focus:ring-1 focus:ring-red-400 lg:col-span-2"
-          />
-
-          {/* Banner image upload */}
-          <div className="lg:col-span-3">
-            <CloudinaryImageUpload
-              folder="banners"
-              label="ব্যানার ছবি *"
-              hiddenFieldName="imageUrl"
-              currentUrl={form.imageUrl || null}
-              onUpload={(url) => setForm((p) => ({ ...p, imageUrl: url }))}
-            />
-          </div>
+            Clear selection
+          </button>
         </div>
-
-        <button
-          type="submit"
-          disabled={creating || !form.imageUrl}
-          className="mt-4 flex items-center gap-2 rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-60"
-        >
-          <Plus className="size-4" />
-          {creating ? "যোগ হচ্ছে..." : "যোগ করুন"}
-        </button>
-      </form>
-
-      {deleteError && (
-        <p className="mb-3 text-sm text-red-600">{deleteError}</p>
       )}
 
-      {/* ── Banner grid ─────────────────────────────────────────────────── */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {loading ? (
-          <p className="col-span-3 py-8 text-center text-gray-400">
-            লোড হচ্ছে...
-          </p>
-        ) : banners.length === 0 ? (
-          <p className="col-span-3 py-8 text-center text-gray-400">
-            কোনো ব্যানার নেই
-          </p>
-        ) : (
-          banners.map((b) => (
-            <div
-              key={b.id}
-              className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm"
-            >
-              {/* Preview */}
-              <div className="relative aspect-[3/1] w-full overflow-hidden bg-gray-100">
-                <Image
-                  src={b.imageUrl}
-                  alt={b.title ?? "banner"}
-                  fill
-                  className="object-cover"
-                  sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
-                />
-              </div>
+      {/* Main Table */}
+      <BannersTable
+        banners={paginatedBanners}
+        loading={loading}
+        selectedIds={selectedIds}
+        onToggleSelectAll={handleToggleSelectAll}
+        onToggleSelectRow={handleToggleSelectRow}
+        onViewBanner={(b) => setViewingBanner(b)}
+        onEditBanner={(b) => setEditingBanner(b)}
+        onToggleActiveBanner={handleToggleActive}
+        onDeleteBanner={(b) => setDeletingBanner(b)}
+      />
 
-              {/* Info + actions */}
-              <div className="flex items-start justify-between p-3">
-                <div>
-                  <p className="text-sm font-medium text-gray-900">
-                    {b.title ?? "—"}
-                  </p>
-                  <div className="mt-0.5 flex items-center gap-2">
-                    <span className="text-xs uppercase text-gray-400">
-                      {b.type}
-                    </span>
-                    <span className="text-xs text-gray-300">·</span>
-                    <span className="text-xs text-gray-400">
-                      order {b.sortOrder}
-                    </span>
-                    <span
-                      className={`ml-1 inline-flex rounded-full px-1.5 py-0.5 text-[10px] font-medium ${
-                        b.isActive
-                          ? "bg-green-100 text-green-700"
-                          : "bg-gray-100 text-gray-500"
-                      }`}
-                    >
-                      {b.isActive ? "Active" : "Inactive"}
-                    </span>
-                  </div>
-                </div>
+      {/* Pagination Footer */}
+      <BannersPagination
+        currentPage={currentPage}
+        pageSize={pageSize}
+        totalItems={filteredBanners.length}
+        onPageChange={setCurrentPage}
+        onPageSizeChange={setPageSize}
+      />
 
-                <button
-                  onClick={() => handleDelete(b.id)}
-                  className="flex items-center gap-1 rounded-md px-2 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50"
-                >
-                  <Trash2 className="size-3.5" />
-                </button>
-              </div>
-            </div>
-          ))
-        )}
-      </div>
+      {/* ── Modals ────────────────────────────────────────────────────────── */}
+
+      {/* Add Banner Modal */}
+      {isAddModalOpen && (
+        <BannerCreateModal
+          onClose={() => setIsAddModalOpen(false)}
+          onCreated={(title) => {
+            showToast("success", `Banner "${title}" created successfully!`);
+            loadData();
+          }}
+          onError={(errorMsg) => {
+            showToast("error", errorMsg);
+          }}
+        />
+      )}
+
+      {/* View Banner Modal */}
+      {viewingBanner && (
+        <BannerViewModal
+          banner={viewingBanner}
+          onClose={() => setViewingBanner(null)}
+          onEdit={() => {
+            const b = viewingBanner;
+            setViewingBanner(null);
+            setEditingBanner(b);
+          }}
+        />
+      )}
+
+      {/* Edit Banner Modal */}
+      {editingBanner && (
+        <BannerEditModal
+          banner={editingBanner}
+          onClose={() => setEditingBanner(null)}
+          onSaved={(title) => {
+            showToast("success", `Banner "${title}" updated successfully!`);
+            loadData();
+          }}
+          onError={(errorMsg) => {
+            showToast("error", errorMsg);
+          }}
+        />
+      )}
+
+      {/* Delete Banner Modal */}
+      {deletingBanner && (
+        <BannerDeleteModal
+          banner={deletingBanner}
+          onClose={() => setDeletingBanner(null)}
+          onDeleted={(title) => {
+            showToast("success", `Banner "${title}" deleted successfully.`);
+            loadData();
+          }}
+          onError={(errorMsg) => {
+            showToast("error", errorMsg);
+          }}
+        />
+      )}
     </div>
   );
 }

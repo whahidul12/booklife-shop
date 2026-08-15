@@ -52,9 +52,13 @@ export async function getBooksAction(opts?: {
   search?: string;
   limit?: number;
   offset?: number;
+  includeInactive?: boolean;
 }): Promise<ActionResult<(typeof books.$inferSelect)[]>> {
   try {
-    const conditions = [eq(books.isActive, true)];
+    const conditions = [];
+    if (!opts?.includeInactive) {
+      conditions.push(eq(books.isActive, true));
+    }
 
     if (opts?.subjectId) conditions.push(eq(books.subjectId, opts.subjectId));
     if (opts?.authorId) conditions.push(eq(books.authorId, opts.authorId));
@@ -65,10 +69,14 @@ export async function getBooksAction(opts?: {
     if (opts?.search)
       conditions.push(ilike(books.name, `%${opts.search}%`));
 
-    const rows = await db
+    const query = db
       .select()
-      .from(books)
-      .where(and(...conditions))
+      .from(books);
+
+    const rows = await (conditions.length > 0
+      ? query.where(and(...conditions))
+      : query
+    )
       .orderBy(desc(books.createdAt))
       .limit(opts?.limit ?? 24)
       .offset(opts?.offset ?? 0);

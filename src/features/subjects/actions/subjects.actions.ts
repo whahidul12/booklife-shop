@@ -135,6 +135,39 @@ export async function updateSubjectAction(
   }
 }
 
+export async function getAllSubjectsAction(): Promise<
+  ActionResult<(typeof subjects.$inferSelect)[]>
+> {
+  try {
+    await requirePermission({ subjects: ["manage"] });
+    const rows = await db
+      .select()
+      .from(subjects)
+      .orderBy(asc(subjects.sortOrder), asc(subjects.title));
+    return { data: rows };
+  } catch (err) {
+    if (err instanceof ActionError) return { error: err.message };
+    return { error: "বিষয় লোড করা যায়নি" };
+  }
+}
+
+export async function toggleSubjectActiveAction(
+  id: string,
+  isActive: boolean,
+): Promise<ActionResult<void>> {
+  try {
+    await requirePermission({ subjects: ["manage"] });
+    await db
+      .update(subjects)
+      .set({ isActive, updatedAt: new Date() })
+      .where(eq(subjects.id, id));
+    return { data: undefined };
+  } catch (err) {
+    if (err instanceof ActionError) return { error: err.message };
+    return { error: "স্ট্যাটাস পরিবর্তন করা যায়নি" };
+  }
+}
+
 export async function deleteSubjectAction(
   id: string,
 ): Promise<ActionResult<void>> {
@@ -147,3 +180,5 @@ export async function deleteSubjectAction(
     return { error: "বিষয় মুছে ফেলা যায়নি" };
   }
 }
+
+
