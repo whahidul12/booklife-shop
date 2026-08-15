@@ -9,6 +9,7 @@ export { WishlistItem } from "./components/WishlistItem";
 
 // Admin page components
 export { DashboardOverview } from "./components/DashboardOverview";
+export * from "./components/overview";
 export { AdminBooksPage } from "./components/AdminBooksPage";
 export { AdminAuthorsPage } from "./components/AdminAuthorsPage";
 export { AdminPublishersPage } from "./components/AdminPublishersPage";

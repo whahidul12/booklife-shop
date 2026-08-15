@@ -1,7 +1,10 @@
+"use client";
+
 import Link from "next/link";
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, LayoutDashboard, LogOut, LogIn } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { NavLink } from "@/types";
+import { useSession, authClient } from "@/lib/auth-client";
 
 interface MobileMenuProps {
   links: NavLink[];
@@ -14,6 +17,19 @@ export function MobileMenu({
   isBookMenuOpen,
   onBookMenuToggle,
 }: MobileMenuProps) {
+  const { data: session } = useSession();
+  const isLoggedIn = !!session?.user;
+
+  const handleSignOut = async () => {
+    try {
+      await authClient.signOut();
+    } catch {
+      // ignore
+    } finally {
+      window.location.href = "/sign-in";
+    }
+  };
+
   return (
     <div
       id="mobile-navigation"
@@ -62,6 +78,37 @@ export function MobileMenu({
             </Link>
           ),
         )}
+
+        {/* Auth Links on Mobile Drawer */}
+        <div className="border-border mt-2 border-t pt-2">
+          {isLoggedIn ? (
+            <>
+              <Link
+                href="/dashboard"
+                className="text-foreground hover:bg-accent hover:text-accent-foreground flex min-h-11 items-center gap-2 rounded-md px-3 text-sm font-medium"
+              >
+                <LayoutDashboard className="size-4 text-[#D10A11]" />
+                <span>ড্যাশবোর্ড</span>
+              </Link>
+              <button
+                type="button"
+                onClick={handleSignOut}
+                className="text-red-600 hover:bg-red-50 flex min-h-11 w-full items-center gap-2 rounded-md px-3 text-sm font-medium cursor-pointer text-left"
+              >
+                <LogOut className="size-4" />
+                <span>লগআউট</span>
+              </button>
+            </>
+          ) : (
+            <Link
+              href="/sign-in"
+              className="text-foreground hover:bg-accent hover:text-accent-foreground flex min-h-11 items-center gap-2 rounded-md px-3 text-sm font-medium"
+            >
+              <LogIn className="size-4" />
+              <span>লগইন করুন</span>
+            </Link>
+          )}
+        </div>
       </div>
     </div>
   );

@@ -25,6 +25,7 @@ import {
   UserCog,
   ShieldCheck,
   LogOut,
+  Home,
 } from "lucide-react";
 
 interface NavItem {
@@ -38,17 +39,18 @@ interface NavItem {
 }
 
 const NAV_ITEMS: NavItem[] = [
-  { label: "Overview",     href: "/dashboard",             icon: LayoutDashboard },
-  { label: "Books",        href: "/dashboard/books",        icon: BookOpen,   permKey: "canManageBooks"           },
-  { label: "Authors",      href: "/dashboard/authors",      icon: Users,      permKey: "canManageAuthors"         },
-  { label: "Publishers",   href: "/dashboard/publishers",   icon: Building2,  permKey: "canManagePublishers"      },
-  { label: "Subjects",     href: "/dashboard/subjects",     icon: Tag,        permKey: "canManageBooks"           },
-  { label: "Reviews",      href: "/dashboard/reviews",      icon: Star,       permKey: "canModerateReviews"       },
-  { label: "Coupons",      href: "/dashboard/coupons",      icon: Ticket,     permKey: "canManageCoupons"         },
-  { label: "Banners",      href: "/dashboard/banners",      icon: Image,      permKey: "canManageHeroBanners"     },
-  { label: "Orders",       href: "/dashboard/orders",       icon: ShoppingBag,permKey: "canManageBooks"           },
-  { label: "Users",        href: "/dashboard/users",        icon: UserCog,    adminOnly: true                     },
-  { label: "Permissions",  href: "/dashboard/permissions",  icon: ShieldCheck,adminOnly: true                     },
+  { label: "Home", href: "/", icon: Home },
+  { label: "Overview", href: "/dashboard", icon: LayoutDashboard },
+  { label: "Books", href: "/dashboard/books", icon: BookOpen, permKey: "canManageBooks" },
+  { label: "Authors", href: "/dashboard/authors", icon: Users, permKey: "canManageAuthors" },
+  { label: "Publishers", href: "/dashboard/publishers", icon: Building2, permKey: "canManagePublishers" },
+  { label: "Subjects", href: "/dashboard/subjects", icon: Tag, permKey: "canManageBooks" },
+  { label: "Reviews", href: "/dashboard/reviews", icon: Star, permKey: "canModerateReviews" },
+  { label: "Coupons", href: "/dashboard/coupons", icon: Ticket, permKey: "canManageCoupons" },
+  { label: "Banners", href: "/dashboard/banners", icon: Image, permKey: "canManageHeroBanners" },
+  { label: "Orders", href: "/dashboard/orders", icon: ShoppingBag, permKey: "canManageBooks" },
+  { label: "Users", href: "/dashboard/users", icon: UserCog, adminOnly: true },
+  { label: "Permissions", href: "/dashboard/permissions", icon: ShieldCheck, adminOnly: true },
 ];
 
 interface DashboardSidebarProps {
@@ -100,8 +102,8 @@ export function DashboardSidebar({ user, permissions }: DashboardSidebarProps) {
         <ul className="space-y-0.5">
           {visibleItems.map(({ label, href, icon: Icon }) => {
             const isActive =
-              href === "/dashboard"
-                ? pathname === "/dashboard"
+              href === "/" || href === "/dashboard"
+                ? pathname === href
                 : pathname.startsWith(href);
             return (
               <li key={href}>
