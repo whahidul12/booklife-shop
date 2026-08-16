@@ -230,11 +230,11 @@ export function AdminPermissionsPage() {
       <PermissionsInsightCards
         insights={insights}
         activeFilter={filters.accessLevel}
-        onSelectFilter={(filter: PermissionAccessFilter) => {
-          handleFilterChange({
-            accessLevel: filters.accessLevel === filter ? "all" : filter,
-          });
-        }}
+      // onSelectFilter={(filter: PermissionAccessFilter) => {
+      //   handleFilterChange({
+      //     accessLevel: filters.accessLevel === filter ? "all" : filter,
+      //   });
+      // }}
       />
 
       {/* Filter and Search Bar */}

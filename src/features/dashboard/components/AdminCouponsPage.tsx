@@ -213,11 +213,11 @@ export function AdminCouponsPage() {
       <CouponsInsightCards
         insights={insights}
         activeStatus={filters.status}
-        onSelectFilter={(status: CouponStatusFilter) => {
-          handleFilterChange({
-            status: filters.status === status ? "all" : status,
-          });
-        }}
+      // onSelectFilter={(status: CouponStatusFilter) => {
+      //   handleFilterChange({
+      //     status: filters.status === status ? "all" : status,
+      //   });
+      // }}
       />
 
       {/* Filter and Search Bar */}

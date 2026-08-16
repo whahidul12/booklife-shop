@@ -202,11 +202,11 @@ export function AdminUsersPage() {
       <UsersInsightCards
         insights={insights}
         activeRole={filters.role}
-        onSelectRole={(role: UserRoleFilter) => {
-          handleFilterChange({
-            role: filters.role === role ? "all" : role,
-          });
-        }}
+      // onSelectRole={(role: UserRoleFilter) => {
+      //   handleFilterChange({
+      //     role: filters.role === role ? "all" : role,
+      //   });
+      // }}
       />
 
       {/* Filter and Search Bar */}

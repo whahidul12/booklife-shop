@@ -7,13 +7,13 @@ import type { CouponInsights, CouponStatusFilter } from "./types";
 interface CouponsInsightCardsProps {
   insights: CouponInsights;
   activeStatus: CouponStatusFilter;
-  onSelectFilter: (status: CouponStatusFilter) => void;
+  //onSelectFilter: (status: CouponStatusFilter) => void;
 }
 
 export function CouponsInsightCards({
   insights,
   activeStatus,
-  onSelectFilter,
+  //onSelectFilter,
 }: CouponsInsightCardsProps) {
   const cards = [
     {
@@ -74,14 +74,12 @@ export function CouponsInsightCards({
             key={card.id}
             onClick={() => {
               if (!card.isStatOnly) {
-                onSelectFilter(card.id as CouponStatusFilter);
+                //onSelectFilter(card.id as CouponStatusFilter);
               }
             }}
-            className={`group relative flex items-center justify-between rounded-2xl border bg-white p-4.5 shadow-sm transition-all duration-200 ${
-              card.isStatOnly ? "cursor-default border-gray-200/70" : "cursor-pointer hover:-translate-y-0.5 hover:shadow-md"
-            } ${
-              isSelected ? `${card.activeRing} border-transparent` : "border-gray-200/70 hover:border-gray-300"
-            }`}
+            className={`group relative flex cursor-pointer items-center justify-between rounded-2xl border p-4.5 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md 
+              ${isSelected ? `bg-linear-to-b from-brand/10 to-white border-brand` : "border-gray-200/70 hover:border-gray-300 bg-white"
+              }`}
           >
             <div className="space-y-1">
               <p className="text-xs font-medium text-gray-500">{card.label}</p>

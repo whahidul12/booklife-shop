@@ -3,6 +3,7 @@ export { AccountLayout } from "./components/AccountLayout";
 export { AccountSidebar } from "./components/AccountSidebar";
 export { DashboardShell } from "./components/DashboardShell";
 export { DashboardSidebar } from "./components/DashboardSidebar";
+export { DashboardHeader, DashboardProvider, useDashboard } from "./components/layout";
 
 // Account components
 export { WishlistItem } from "./components/WishlistItem";

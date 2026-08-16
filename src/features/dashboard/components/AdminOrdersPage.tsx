@@ -187,11 +187,11 @@ export function AdminOrdersPage() {
       <OrdersInsightCards
         insights={insights}
         activeStatus={filters.status}
-        onSelectStatus={(status: OrderStatusFilter) => {
-          handleFilterChange({
-            status: filters.status === status ? "all" : status,
-          });
-        }}
+      // onSelectStatus={(status: OrderStatusFilter) => {
+      //   handleFilterChange({
+      //     status: filters.status === status ? "all" : status,
+      //   });
+      // }}
       />
 
       {/* Filter and Search Bar */}

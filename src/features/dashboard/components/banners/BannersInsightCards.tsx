@@ -7,13 +7,13 @@ import type { BannerInsights, BannerTypeFilter } from "./types";
 interface BannersInsightCardsProps {
   insights: BannerInsights;
   activeType: BannerTypeFilter;
-  onSelectType: (type: BannerTypeFilter) => void;
+  //onSelectType: (type: BannerTypeFilter) => void;
 }
 
 export function BannersInsightCards({
   insights,
   activeType,
-  onSelectType,
+  //onSelectType,
 }: BannersInsightCardsProps) {
   const cards = [
     {
@@ -60,10 +60,10 @@ export function BannersInsightCards({
         return (
           <div
             key={card.id}
-            onClick={() => onSelectType(card.id)}
-            className={`group relative flex cursor-pointer items-center justify-between rounded-2xl border bg-white p-4.5 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md ${
-              isSelected ? `${card.activeRing} border-transparent` : "border-gray-200/70 hover:border-gray-300"
-            }`}
+            //onClick={() => onSelectType(card.id)}
+            className={`group relative flex cursor-pointer items-center justify-between rounded-2xl border p-4.5 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md 
+              ${isSelected ? `bg-linear-to-b from-brand/10 to-white border-brand` : "border-gray-200/70 hover:border-gray-300 bg-white"
+              }`}
           >
             <div className="space-y-1">
               <p className="text-xs font-medium text-gray-500">{card.label}</p>

@@ -238,11 +238,11 @@ export function AdminReviewsPage() {
       <ReviewsInsightCards
         insights={insights}
         activeStatus={filters.status}
-        onSelectFilter={(status: ReviewStatusFilter) => {
-          handleFilterChange({
-            status: filters.status === status ? "all" : status,
-          });
-        }}
+      // onSelectFilter={(status: ReviewStatusFilter) => {
+      //   handleFilterChange({
+      //     status: filters.status === status ? "all" : status,
+      //   });
+      // }}
       />
 
       {/* Filter and Search Bar */}

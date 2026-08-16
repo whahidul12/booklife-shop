@@ -195,11 +195,11 @@ export function AdminSubjectsPage() {
       <SubjectsInsightCards
         insights={insights}
         activeStatus={filters.status}
-        onSelectFilter={(status: SubjectStatusFilter) => {
-          handleFilterChange({
-            status: filters.status === status ? "all" : status,
-          });
-        }}
+      // onSelectFilter={(status: SubjectStatusFilter) => {
+      //   handleFilterChange({
+      //     status: filters.status === status ? "all" : status,
+      //   });
+      // }}
       />
 
       {/* Filter and Search Bar */}

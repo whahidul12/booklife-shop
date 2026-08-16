@@ -264,11 +264,11 @@ export function AdminBooksPage() {
       <BooksInsightCards
         insights={insights}
         activeStatus={filters.status}
-        onSelectFilter={(status: BookStatusFilter) => {
-          handleFilterChange({
-            status: filters.status === status ? "all" : status,
-          });
-        }}
+      // onSelectFilter={(status: BookStatusFilter) => {
+      //   handleFilterChange({
+      //     status: filters.status === status ? "all" : status,
+      //   });
+      // }}
       />
 
       {/* Filter and Search Bar */}

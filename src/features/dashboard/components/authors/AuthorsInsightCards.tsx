@@ -7,13 +7,13 @@ import type { AuthorInsights, AuthorPhotoFilter } from "./types";
 interface AuthorsInsightCardsProps {
   insights: AuthorInsights;
   activeStatus: AuthorPhotoFilter;
-  onSelectFilter: (status: AuthorPhotoFilter) => void;
+  //onSelectFilter: (status: AuthorPhotoFilter) => void;
 }
 
 export function AuthorsInsightCards({
   insights,
   activeStatus,
-  onSelectFilter,
+  //onSelectFilter,
 }: AuthorsInsightCardsProps) {
   const cards = [
     {
@@ -61,16 +61,14 @@ export function AuthorsInsightCards({
         return (
           <div
             key={card.id}
-            onClick={() => {
-              if (!card.isStatOnly) {
-                onSelectFilter(card.id as AuthorPhotoFilter);
-              }
-            }}
-            className={`group relative flex items-center justify-between rounded-2xl border bg-white p-4.5 shadow-sm transition-all duration-200 ${
-              card.isStatOnly ? "cursor-default border-gray-200/70" : "cursor-pointer hover:-translate-y-0.5 hover:shadow-md"
-            } ${
-              isSelected ? `${card.activeRing} border-transparent` : "border-gray-200/70 hover:border-gray-300"
-            }`}
+            // onClick={() => {
+            //   if (!card.isStatOnly) {
+            //     onSelectFilter(card.id as AuthorPhotoFilter);
+            //   }
+            // }}
+            className={`group relative flex cursor-pointer items-center justify-between rounded-2xl border p-4.5 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md 
+              ${isSelected ? `bg-linear-to-b from-brand/10 to-white border-brand` : "border-gray-200/70 hover:border-gray-300 bg-white"
+              }`}
           >
             <div className="space-y-1">
               <p className="text-xs font-medium text-gray-500">{card.label}</p>

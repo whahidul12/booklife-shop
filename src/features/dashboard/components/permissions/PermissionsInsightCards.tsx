@@ -7,13 +7,13 @@ import type { PermissionInsights, PermissionAccessFilter } from "./types";
 interface PermissionsInsightCardsProps {
   insights: PermissionInsights;
   activeFilter: PermissionAccessFilter;
-  onSelectFilter: (filter: PermissionAccessFilter) => void;
+  //onSelectFilter: (filter: PermissionAccessFilter) => void;
 }
 
 export function PermissionsInsightCards({
   insights,
   activeFilter,
-  onSelectFilter,
+  //onSelectFilter,
 }: PermissionsInsightCardsProps) {
   const cards = [
     {
@@ -71,10 +71,10 @@ export function PermissionsInsightCards({
         return (
           <div
             key={card.id}
-            onClick={() => onSelectFilter(card.id)}
-            className={`group relative flex cursor-pointer items-center justify-between rounded-2xl border bg-white p-4.5 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md ${
-              isSelected ? `${card.activeRing} border-transparent` : "border-gray-200/70 hover:border-gray-300"
-            }`}
+            //onClick={() => onSelectFilter(card.id)}
+            className={`group relative flex cursor-pointer items-center justify-between rounded-2xl border p-4.5 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md 
+              ${isSelected ? `bg-linear-to-b from-brand/10 to-white border-brand` : "border-gray-200/70 hover:border-gray-300 bg-white"
+              }`}
           >
             <div className="space-y-1">
               <p className="text-xs font-medium text-gray-500">{card.label}</p>

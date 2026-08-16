@@ -174,11 +174,11 @@ export function AdminAuthorsPage() {
       <AuthorsInsightCards
         insights={insights}
         activeStatus={filters.photoStatus}
-        onSelectFilter={(status: AuthorPhotoFilter) => {
-          handleFilterChange({
-            photoStatus: filters.photoStatus === status ? "all" : status,
-          });
-        }}
+      // onSelectFilter={(status: AuthorPhotoFilter) => {
+      //   handleFilterChange({
+      //     photoStatus: filters.photoStatus === status ? "all" : status,
+      //   });
+      // }}
       />
 
       {/* Filter and Search Bar */}

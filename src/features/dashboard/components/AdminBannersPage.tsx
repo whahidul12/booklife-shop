@@ -204,11 +204,11 @@ export function AdminBannersPage() {
       <BannersInsightCards
         insights={insights}
         activeType={filters.type}
-        onSelectType={(type: BannerTypeFilter) => {
-          handleFilterChange({
-            type: filters.type === type ? "all" : type,
-          });
-        }}
+      // onSelectType={(type: BannerTypeFilter) => {
+      //   handleFilterChange({
+      //     type: filters.type === type ? "all" : type,
+      //   });
+      // }}
       />
 
       {/* Filter and Search Bar */}

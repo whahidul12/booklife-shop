@@ -176,11 +176,11 @@ export function AdminPublishersPage() {
       <PublishersInsightCards
         insights={insights}
         activeStatus={filters.logoStatus}
-        onSelectFilter={(status: PublisherLogoFilter) => {
-          handleFilterChange({
-            logoStatus: filters.logoStatus === status ? "all" : status,
-          });
-        }}
+      // onSelectFilter={(status: PublisherLogoFilter) => {
+      //   handleFilterChange({
+      //     logoStatus: filters.logoStatus === status ? "all" : status,
+      //   });
+      // }}
       />
 
       {/* Filter and Search Bar */}
