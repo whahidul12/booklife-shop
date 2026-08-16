@@ -33,10 +33,75 @@ import {
   ordersModeratorRole,
 } from "@/lib/permissions";
 
+const getBaseURL = () => {
+  if (process.env.BETTER_AUTH_URL) return process.env.BETTER_AUTH_URL;
+  if (process.env.NEXT_PUBLIC_APP_URL) return process.env.NEXT_PUBLIC_APP_URL;
+  if (process.env.VERCEL_PROJECT_PRODUCTION_URL) {
+    return `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`;
+  }
+  if (process.env.VERCEL_URL) {
+    return `https://${process.env.VERCEL_URL}`;
+  }
+  if (process.env.NODE_ENV === "production") {
+    return "https://booklife-shop-one.vercel.app";
+  }
+  return "http://localhost:3000";
+};
+
 export const auth = betterAuth({
-  // ── Base URL ─────────────────────────────────────────────────────────────
-  baseURL: process.env.BETTER_AUTH_URL ?? process.env.NEXT_PUBLIC_APP_URL,
+  // ── Base URL & Security ───────────────────────────────────────────────────
+  baseURL: getBaseURL(),
   secret: process.env.BETTER_AUTH_SECRET,
+  trustedOrigins: async (request) => {
+    const origins: string[] = [
+      "https://booklife-shop-one.vercel.app",
+      "https://*.vercel.app",
+      "http://localhost:3000",
+      "http://localhost:3001",
+      "http://localhost:3002",
+      "http://localhost:3003",
+      "http://127.0.0.1:3000",
+      "http://127.0.0.1:3001",
+      "http://127.0.0.1:3002",
+      "http://127.0.0.1:3003",
+      "http://localhost:*",
+      "http://127.0.0.1:*",
+      "http://[::1]:*",
+    ];
+
+    if (process.env.VERCEL_URL) {
+      origins.push(`https://${process.env.VERCEL_URL}`);
+    }
+    if (process.env.VERCEL_PROJECT_PRODUCTION_URL) {
+      origins.push(`https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`);
+    }
+    if (process.env.BETTER_AUTH_URL) {
+      origins.push(process.env.BETTER_AUTH_URL);
+    }
+    if (process.env.NEXT_PUBLIC_APP_URL) {
+      origins.push(process.env.NEXT_PUBLIC_APP_URL);
+    }
+    if (process.env.BETTER_AUTH_TRUSTED_ORIGINS) {
+      origins.push(
+        ...process.env.BETTER_AUTH_TRUSTED_ORIGINS.split(",").map((s) => s.trim())
+      );
+    }
+
+    if (request) {
+      try {
+        const origin = request.headers.get("origin");
+        if (origin) origins.push(origin);
+
+        const host = request.headers.get("x-forwarded-host") || request.headers.get("host");
+        const proto = request.headers.get("x-forwarded-proto") || "https";
+        if (host) origins.push(`${proto}://${host}`);
+      } catch {
+        // Fallback safely if headers cannot be parsed
+      }
+    }
+
+    return Array.from(new Set(origins.filter(Boolean)));
+  },
 
   // ── Database ─────────────────────────────────────────────────────────────
   database: drizzleAdapter(db, {
