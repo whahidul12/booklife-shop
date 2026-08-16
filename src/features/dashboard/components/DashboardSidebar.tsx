@@ -73,32 +73,24 @@ export function DashboardSidebar({ user, permissions }: DashboardSidebarProps) {
   });
 
   return (
-    <aside className="sticky top-0 flex h-screen w-60 shrink-0 flex-col border-r border-gray-200 bg-white">
-      {/* Brand */}
-      <div className="border-b border-gray-100 px-5 py-4">
-        <p className="text-lg font-bold text-red-600">BookLife</p>
-        <p className="text-xs font-medium uppercase tracking-widest text-gray-400">
-          {isAdmin ? "Admin Panel" : "Moderator Panel"}
+    <aside className="sticky top-0 flex h-screen w-60 shrink-0 flex-col border-r border-gray-200/80 bg-white">
+      {/* Brand Header */}
+      <div className="border-b border-gray-100 px-5 py-4.5">
+        <div className="flex items-center gap-2">
+          <span className="text-xl font-black tracking-tight text-[#D10A13]">
+            BookLife
+          </span>
+          <span className="rounded-md bg-red-50 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-[#D10A13] border border-red-100">
+            {isAdmin ? "Admin" : "Mod"}
+          </span>
+        </div>
+        <p className="text-[11px] font-medium text-gray-400 mt-0.5">
+          Management Portal
         </p>
       </div>
 
-      {/* User chip */}
-      <div className="border-b border-gray-100 px-5 py-3">
-        <div className="flex items-center gap-2">
-          <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-red-100 text-sm font-bold text-red-600">
-            {user.name.charAt(0).toUpperCase()}
-          </div>
-          <div className="min-w-0">
-            <p className="truncate text-sm font-semibold text-gray-800">
-              {user.name}
-            </p>
-            <p className="truncate text-xs text-gray-400">{user.email}</p>
-          </div>
-        </div>
-      </div>
-
       {/* Nav links */}
-      <nav className="flex-1 overflow-y-auto px-3 py-4">
+      <nav className="flex-1 overflow-y-auto px-3 py-3.5 space-y-1">
         <ul className="space-y-0.5">
           {visibleItems.map(({ label, href, icon: Icon }) => {
             const isActive =
@@ -110,14 +102,20 @@ export function DashboardSidebar({ user, permissions }: DashboardSidebarProps) {
                 <Link
                   href={href}
                   className={cn(
-                    "flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium transition-colors",
+                    "flex items-center gap-3 rounded-xl px-3.5 py-2.5 text-xs font-semibold transition-all",
                     isActive
-                      ? "bg-red-50 text-red-600"
-                      : "text-gray-600 hover:bg-gray-100 hover:text-gray-900",
+                      ? "bg-red-50 text-[#D10A13] shadow-2xs"
+                      : "text-gray-600 hover:bg-gray-50 hover:text-gray-900",
                   )}
                 >
-                  <Icon className="size-4 shrink-0" aria-hidden="true" />
-                  {label}
+                  <Icon
+                    className={cn(
+                      "size-4 shrink-0 transition-colors",
+                      isActive ? "text-[#D10A13]" : "text-gray-400 group-hover:text-gray-600"
+                    )}
+                    aria-hidden="true"
+                  />
+                  <span>{label}</span>
                 </Link>
               </li>
             );
@@ -125,17 +123,38 @@ export function DashboardSidebar({ user, permissions }: DashboardSidebarProps) {
         </ul>
       </nav>
 
-      {/* Sign out */}
-      <div className="border-t border-gray-100 px-3 py-4">
+      {/* Bottom Footer: User Info & Sign Out */}
+      <div className="border-t border-gray-100 bg-gray-50/50 p-3 space-y-2">
+        {/* Sign out */}
         <form action={signOutAction}>
           <button
             type="submit"
-            className="flex w-full items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-900"
+            className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-xs font-semibold text-gray-600 transition-all hover:bg-red-50 hover:text-[#D10A13] active:scale-[0.98] group cursor-pointer"
           >
-            <LogOut className="size-4 shrink-0" aria-hidden="true" />
-            Sign out
+            <LogOut
+              className="size-4 shrink-0 text-gray-400 group-hover:text-[#D10A13] transition-colors"
+              aria-hidden="true"
+            />
+            <span>Sign out</span>
           </button>
         </form>
+
+        {/* User Card */}
+        <div className="flex items-center gap-2.5 rounded-xl bg-white p-2.5 shadow-2xs border border-gray-200/70">
+          <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-red-50 font-bold text-xs text-[#D10A13] border border-red-100 shadow-2xs">
+            {user.name.charAt(0).toUpperCase()}
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-xs font-bold text-gray-900 leading-tight">
+              {user.name}
+            </p>
+            <p className="truncate text-[11px] text-gray-400 font-mono leading-tight mt-0.5">
+              {user.email}
+            </p>
+          </div>
+        </div>
+
+
       </div>
     </aside>
   );

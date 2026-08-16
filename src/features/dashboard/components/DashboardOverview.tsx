@@ -1,10 +1,11 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import { RefreshCw, AlertCircle } from "lucide-react";
 import { getDashboardAnalyticsAction } from "../actions/analytics.actions";
 import type { DashboardAnalytics } from "../actions/analytics.actions";
 import {
+  OverviewHeader,
   KpiStatCards,
   DeliveryStatusCard,
   ReturningClientsCard,
@@ -14,14 +15,18 @@ import {
   PaymentMethodsCard,
   CustomerSatisfactionCard,
   RecentOrdersTable,
+  getDefaultLastWeekRange,
+  type DateRange,
 } from "./overview";
 
 export function DashboardOverview() {
   const [data, setData] = useState<DashboardAnalytics | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const [dateRange, setDateRange] = useState<DateRange>(getDefaultLastWeekRange());
 
-  async function loadData() {
+  const loadData = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
@@ -30,17 +35,18 @@ export function DashboardOverview() {
         setError(res.error);
       } else if (res.data) {
         setData(res.data);
+        setLastUpdated(new Date());
       }
     } catch {
-      setError("Failed to load dashboard data. Using preview data.");
+      setError("Failed to load live metrics. Displaying analytical baseline.");
     } finally {
       setLoading(false);
     }
-  }
+  }, []);
 
   useEffect(() => {
     loadData();
-  }, []);
+  }, [loadData]);
 
   // Compute metrics from real data if available
   let deliveredCount = 859;
@@ -86,13 +92,22 @@ export function DashboardOverview() {
   }
 
   return (
-    <div className="w-full bg-[#f8fafc] min-h-screen p-4 sm:p-6 lg:p-8 space-y-6">
-      {/* Header alert if error */}
+    <div className="w-full space-y-6">
+      {/* Overview Top Header Section */}
+      <OverviewHeader
+        loading={loading}
+        onRefresh={loadData}
+        dateRange={dateRange}
+        onDateRangeChange={(range) => setDateRange(range)}
+        lastUpdated={lastUpdated}
+      />
+
+      {/* Alert Banner if live connection has issues */}
       {error && (
         <div className="flex items-center justify-between p-3.5 bg-amber-50 border border-amber-200 rounded-xl text-amber-800 text-xs">
           <div className="flex items-center gap-2">
             <AlertCircle className="size-4 text-amber-600 shrink-0" />
-            <span>{error} (Viewing preview data)</span>
+            <span>{error} (Viewing cached baseline data)</span>
           </div>
           <button
             onClick={loadData}

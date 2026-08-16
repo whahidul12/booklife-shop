@@ -1,3 +1,4 @@
+export { OverviewHeader } from "./OverviewHeader";
 export { KpiStatCards } from "./KpiStatCards";
 export { DeliveryStatusCard } from "./DeliveryStatusCard";
 export { ReturningClientsCard } from "./ReturningClientsCard";
